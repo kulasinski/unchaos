@@ -51,15 +51,15 @@ def remove_note(note_id):
 
 class Note:
     """Handles note creation and storage."""
-    def __init__(self):
+    def __init__(self, title="Untitled"):
         self.note_id = str(uuid.uuid4())
         self.file_path = os.path.join(STORAGE_DIR, f"{self.note_id}.json")
         self.note_data = {
             "id": self.note_id,
             "meta": {
                 "created_at": datetime.now().isoformat(),
-                "updated_at": None,
-                "title": None
+                "updated_at": "",
+                "title": title
             },
             "snippets": [],
             "tags": [],
@@ -71,6 +71,7 @@ class Note:
         tags, keywords = extract_tags_and_keywords(content)
 
         snippet = {
+            "id": str(uuid.uuid4()),
             "created_at": datetime.now().isoformat(),
             "content": content
         }

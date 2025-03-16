@@ -4,6 +4,7 @@ import uuid
 from datetime import datetime
 import re
 
+from .io import show_note
 from .config import STORAGE_DIR
 
 TAG_PATTERN = r'#(?:\"(.*?)\"|(\w+))'
@@ -31,14 +32,46 @@ def save_note(content):
 
     return note_id
 
-def list_notes():
-    """Lists all stored notes."""
+def list_notes(filters=None):
+    """List notes filtered by tags and keywords."""
     notes = []
-    for filename in os.listdir(STORAGE_DIR):
-        if filename.endswith(".json"):
-            file_path = os.path.join(STORAGE_DIR, filename)
-            with open(file_path, "r", encoding="utf-8") as f:
-                notes.append(json.load(f))
+    
+    if filters:
+        print(f"Filtering notes by tags: {filters.get('tags', [])} and keywords: {filters.get('keywords', [])}")
+
+    for file_name in os.listdir(STORAGE_DIR):
+        if file_name.endswith(".json"):
+            note_file = os.path.join(STORAGE_DIR, file_name)
+
+            with open(note_file, "r", encoding="utf-8") as f:
+                note = json.load(f)
+
+            if not filters:  # No filters, add all notes
+                notes.append(note)
+                continue
+
+            # Check if note matches filter criteria
+            tags_match = any(tag in note["tags"] for tag in filters.get("tags", []))
+            keywords_match = any(keyword in note["keywords"] for keyword in filters.get("keywords", []))
+
+            # print(note["tags"], note["keywords"], tags_match, keywords_match)
+
+            if tags_match or keywords_match:
+                notes.append(note)
+
+        # Show matching notes and their snippets
+    if notes and filters:
+        for note in notes:
+            show_note(note["id"], show_all=True, filters=filters)
+    elif filters:
+        print("No notes found matching the filters.")
+    elif notes:
+        for note in notes:
+            print(f"{note['id']} {note['meta']['title']} ({note['meta']['created_at']})")
+    else:
+        print("No notes found.")
+
+
     return notes
 
 def remove_note(note_id):

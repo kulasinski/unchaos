@@ -1,4 +1,5 @@
 # unchaos
+Your git for Notes.
  Take notes like pro - enhanced with AI
 
 Locally:

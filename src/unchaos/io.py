@@ -11,8 +11,6 @@ def show_note(note_id, show_all=False, filters=None):
     """Display a note with color highlights for tags and keywords."""
     note_file = os.path.join(STORAGE_DIR, f"{note_id}.json")
 
-    print("filters", filters)   
-
     if not os.path.exists(note_file):
         print(f"{Fore.RED}Error: Note {note_id} not found.")
         return

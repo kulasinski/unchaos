@@ -2,7 +2,7 @@ import argparse
 import signal
 import sys
 
-from .storage import Note, list_notes
+from .storage import Note, list_notes, remove_note
 from .io import show_note
 
 def parse_filters(filter_str):
@@ -33,7 +33,7 @@ def add_note(title="Untitled"):
 
     def handle_interrupt(sig, frame):
         print("\nDiscarding note...")
-        note.discard()
+        remove_note(note.note_id)
         sys.exit(0)
 
     signal.signal(signal.SIGINT, handle_interrupt)
@@ -49,7 +49,7 @@ def add_note(title="Untitled"):
                 break
     except KeyboardInterrupt:
         print("\nDiscarding note...")
-        note.discard()
+        remove_note(note.note_id)
         sys.exit(0)
 
 def main():

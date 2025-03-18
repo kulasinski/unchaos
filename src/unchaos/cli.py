@@ -60,9 +60,11 @@ def init():
 
 # --- Command to Add a Note ---
 @click.command()
-@click.argument("title", default="untitled")
+@click.argument("title", default=None, required=False)
 def add(title: str):
     """Adds a new note with the given title."""
+    if not title:
+        title = f"untitled ({datetime.now().strftime("%Y-%m-%d %H:%M:%S")})"
     # Create a new note
     note = create_note(title=title, db=get_session())
     click.echo(f"Note created with ID: {note.id} and title: {note.title}")
@@ -73,22 +75,25 @@ def add(title: str):
         delete_notes(note.id, db=get_session())  # Deleting the note on Ctrl+C
         sys.exit(0)
 
+    def handle_exit(sig, frame):
+        click.echo("\nFinishing and saving note...")
+        add_to_queue(note.id, db=get_session())
+        click.echo(f"Note {note.id} added to the queue.")
+        sys.exit(0)
+
     signal.signal(signal.SIGINT, handle_interrupt)
+    signal.signal(signal.SIGQUIT, handle_exit)
 
     # Loop to accept multiple snippets from the user
     while True:
         try:
             content = click.prompt("> ", prompt_suffix="")
-            if not content.strip():
-                continue
-            add_snippet(note.id, content, db=get_session())  # Adding snippet
-            click.echo(f"Snippet added to Note {note.id}")
-        except EOFError:
-            click.echo("\nFinishing and saving note...")
-            # Add the newly created note to the queue
-            add_to_queue(note.id, db=get_session())
-            click.echo(f"Note {note.id} added to the queue.")
-            break
+        except click.Abort:
+            handle_exit(None, None)
+        if not content.strip():
+            continue
+        add_snippet(note.id, content, db=get_session())  # Adding snippet
+        click.echo(f"Snippet added to Note {note.id}")
 
 # --- Command to Delete a Note ---
 @click.command()
@@ -195,4 +200,4 @@ cli.add_command(link)
 cli.add_command(ai)
 
 if __name__ == "__main__":
-    cli()
+    cli()  # Run the CLI application

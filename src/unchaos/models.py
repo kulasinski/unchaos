@@ -62,12 +62,20 @@ def get_note_by_id(note_id: int, db: Session = None) -> Optional[Note]:
     db = db or next(get_db())
     return db.query(Note).filter_by(id=note_id, active=True).first()
 
-def delete_note(note_id: int, db: Session = None):
+def archive_note(note_id: int, db: Session = None):
     """Deletes a note (soft delete)."""
     db = db or next(get_db())
     note = db.query(Note).filter_by(id=note_id).first()
     if note:
         note.active = False
+        db.commit()
+
+def delete_note(note_id: int, db: Session = None):
+    """Permanently deletes a note."""
+    db = db or next(get_db())
+    note = db.query(Note).filter_by(id=note_id).first()
+    if note:
+        db.delete(note)
         db.commit()
 
 def search_notes(filters: List[str], db: Session = None) -> List[Note]:

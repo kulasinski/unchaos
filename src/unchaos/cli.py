@@ -1,9 +1,13 @@
 import logging
 import os
 from datetime import datetime
+import signal
+import sys
 
 import toml
 import click
+
+from unchaos.utils import find_note_by_id_or_name
 
 from .models import add_to_queue, create_note, add_snippet, get_notes, get_note_by_id, delete_note, search_notes, add_ai_entry, link_notes
 from .db import get_db
@@ -63,24 +67,51 @@ def add(title: str):
     """Adds a new note with the given title."""
     # Create a new note
     note = create_note(title=title, db=get_session())
-    click.echo(f"Note created with ID: {note.id}")
+    click.echo(f"Note created with ID: {note.id} and title: {note.title}")
+    click.echo("Enter snippets one by one. (Ctrl+D to save note, Ctrl+C to discard note):")
+
+    def handle_interrupt(sig, frame):
+        click.echo("\nCancelling and deleting note...")
+        delete_note(note.id, db=get_session())  # Deleting the note on Ctrl+C
+        sys.exit(0)
+
+    signal.signal(signal.SIGINT, handle_interrupt)
 
     # Loop to accept multiple snippets from the user
     while True:
         try:
-            content = click.prompt("Enter snippet (Ctrl+D to finish, Ctrl+C to discard)")
+            content = click.prompt("> ", prompt_suffix="")
+            if not content.strip():
+                continue
             add_snippet(note.id, content, db=get_session())  # Adding snippet
             click.echo(f"Snippet added to Note {note.id}")
-        except KeyboardInterrupt:
-            click.echo("\nCancelling and deleting note...")
-            delete_note(note.id, db=get_session())  # Deleting the note on Ctrl+C
-            break
         except EOFError:
             click.echo("\nFinishing and saving note...")
             # Add the newly created note to the queue
             add_to_queue(note.id, db=get_session())
             click.echo(f"Note {note.id} added to the queue.")
             break
+
+# --- Command to Delete a Note ---
+@click.command()
+@click.argument('identifier')  # ID or name of the note
+def delete(identifier):
+    """
+    Delete a note by its ID or name.
+    """
+    session = get_session()
+
+    # Use helper function to find the note by ID or name
+    note = find_note_by_id_or_name(session, identifier)
+    
+    if not note:
+        click.echo(f"No note found with identifier: {identifier}")
+        return
+
+    session.delete(note)
+    session.commit()
+
+    click.echo(f"Note with identifier '{identifier}' has been deleted.")
 
 # --- Command to Show Notes ---
 @click.command()
@@ -155,12 +186,13 @@ def ai(note_id: int, content: str, content_type: str, model_name: str):
     click.echo(f"AI entry added to note {note_id} with model {model_name}. Content: {ai_entry.content[:30]}...")
 
 # Registering commands
+cli.add_command(init)
 cli.add_command(add)
+cli.add_command(delete)
 cli.add_command(show)
 cli.add_command(list)
 cli.add_command(link)
 cli.add_command(ai)
-cli.add_command(init)
 
 if __name__ == "__main__":
     cli()

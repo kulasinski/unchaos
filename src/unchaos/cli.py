@@ -17,11 +17,15 @@ def cli():
     """Unchaos CLI - A tool for managing your notes with advanced tagging, AI integration, and searching."""
     pass
 
-
 # Helper function to get the active DB session
 def get_session() -> Session:
     """Returns an active session for database interaction."""
     return next(get_db())
+
+
+# ------------------------------------
+# --- Command Line Interface (CLI) ---
+# ------------------------------------
 
 # --- Command to Initialize the System ---
 @click.command()
@@ -113,7 +117,9 @@ def delete(identifier: Union[str,int]):
 
     len_notes_deleted = delete_notes(id=id, title=title, db=session)
 
-    if len_notes_deleted == 0:
+    if not len_notes_deleted:
+        click.echo(f"No notes deleted.")
+    elif len_notes_deleted == 0:
         click.echo(f"No note found with {'id' if id else 'title'} '{identifier}'.")
     else:
         click.echo(f"{len_notes_deleted} note(s) with {'id' if id else 'title'} '{identifier}' has been deleted.")
@@ -190,7 +196,10 @@ def ai(note_id: int, content: str, content_type: str, model_name: str):
     ai_entry = add_ai_entry(note_id, None, content, content_type, model_name, db=get_session())
     click.echo(f"AI entry added to note {note_id} with model {model_name}. Content: {ai_entry.content[:30]}...")
 
-# Registering commands
+# ----------------------------
+# --- Registering commands ---
+# ----------------------------
+
 cli.add_command(init)
 cli.add_command(add)
 cli.add_command(delete)

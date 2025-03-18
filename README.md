@@ -21,10 +21,11 @@ python3 -m pip install --force-reinstall dist/*.whl --break-system-packages # In
 ### Delete a note
 - by id (integer) `unchaos delete <id>`
 - by title (string) `unchaos delete <title>`
+- using wildcard in "", e.g. `unchaos delete "untitled*"`
 
 ## Tips
 
-Run `sqlite3 ~/.unchaos/unchaos.db` to view the database.
+- Run `sqlite3 ~/.unchaos/unchaos.db` to view the database.
 
 ## Migrations
 

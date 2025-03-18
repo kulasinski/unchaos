@@ -76,9 +76,21 @@ def delete_notes(id: int, title: str = None, db: Session = None):
     if id:
         notes = db.query(Note).filter(Note.id == id).all()
     elif title:
-        notes = db.query(Note).filter(Note.title == title).all()
+        if '*' in title:
+            notes = db.query(Note).filter(Note.title.like(title.replace('*', '%'))).all()
+        else:
+            notes = db.query(Note).filter(Note.title == title).all()
     else:
         raise ValueError("Please provide either an ID or title to delete notes.")
+    
+    if not notes:
+        return 0
+    
+    """ Confirm deletion of notes """
+    confirmation = input(f"Are you sure you want to delete {len(notes)} note(s)? (y/n): ")
+    if confirmation.lower() not in ["y", "yes"]:
+        return None
+
     for note in notes:
         db.delete(note)
     db.commit()

@@ -89,7 +89,7 @@ class Queue(Base):
     __tablename__ = 'queue'
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    note_id = Column(Integer, ForeignKey('notes.id'), nullable=False)
+    note_id = Column(Integer, ForeignKey('notes.id', ondelete="CASCADE"), nullable=False)
     status = Column(String(50), nullable=False, default='pending')  # status could be "pending", "processing", etc.
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
     updated_at = Column(DateTime, nullable=True, default=datetime.utcnow, onupdate=datetime.utcnow)

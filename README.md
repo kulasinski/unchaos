@@ -15,6 +15,15 @@ poetry build
 python3 -m pip install --force-reinstall dist/*.whl --break-system-packages # Install it globally via pip
 ```
 
+## Tips
+
+Run `sqlite3 ~/.unchaos/unchaos.db` to view the database.
+
+## Migrations
+
+poetry run alembic revision --autogenerate -m "Initial migration"
+Apply Migration: alembic upgrade head
+
 ## Structure
 
 unchaos/

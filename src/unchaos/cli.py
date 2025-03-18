@@ -7,12 +7,10 @@ import sys
 import toml
 import click
 
-from unchaos.utils import find_note_by_id_or_name
-
-from .models import add_to_queue, create_note, add_snippet, get_notes, get_note_by_id, delete_note, search_notes, add_ai_entry, link_notes
+from .models import add_to_queue, create_note, add_snippet, get_notes, get_note_by_id, delete_notes, search_notes, add_ai_entry, link_notes
 from .db import get_db
 from sqlalchemy.orm import Session
-from typing import List
+from typing import List, Union
 
 @click.group()
 def cli():
@@ -72,7 +70,7 @@ def add(title: str):
 
     def handle_interrupt(sig, frame):
         click.echo("\nCancelling and deleting note...")
-        delete_note(note.id, db=get_session())  # Deleting the note on Ctrl+C
+        delete_notes(note.id, db=get_session())  # Deleting the note on Ctrl+C
         sys.exit(0)
 
     signal.signal(signal.SIGINT, handle_interrupt)
@@ -95,23 +93,25 @@ def add(title: str):
 # --- Command to Delete a Note ---
 @click.command()
 @click.argument('identifier')  # ID or name of the note
-def delete(identifier):
+def delete(identifier: Union[str,int]):
     """
     Delete a note by its ID or name.
     """
     session = get_session()
 
-    # Use helper function to find the note by ID or name
-    note = find_note_by_id_or_name(session, identifier)
-    
-    if not note:
-        click.echo(f"No note found with identifier: {identifier}")
-        return
+    # Infer the type of identifier (ID or name) and find the note
+    id, title = None, None
+    try:
+        id = int(identifier)
+    except ValueError:
+        title = identifier
 
-    session.delete(note)
-    session.commit()
+    len_notes_deleted = delete_notes(id=id, title=title, db=session)
 
-    click.echo(f"Note with identifier '{identifier}' has been deleted.")
+    if len_notes_deleted == 0:
+        click.echo(f"No note found with {'id' if id else 'title'} '{identifier}'.")
+    else:
+        click.echo(f"{len_notes_deleted} note(s) with {'id' if id else 'title'} '{identifier}' has been deleted.")
 
 # --- Command to Show Notes ---
 @click.command()

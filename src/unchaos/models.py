@@ -70,13 +70,19 @@ def archive_note(note_id: int, db: Session = None):
         note.active = False
         db.commit()
 
-def delete_note(note_id: int, db: Session = None):
-    """Permanently deletes a note."""
+def delete_notes(id: int, title: str = None, db: Session = None):
+    """Permanently deletes multiple notes."""
     db = db or next(get_db())
-    note = db.query(Note).filter_by(id=note_id).first()
-    if note:
+    if id:
+        notes = db.query(Note).filter(Note.id == id).all()
+    elif title:
+        notes = db.query(Note).filter(Note.title == title).all()
+    else:
+        raise ValueError("Please provide either an ID or title to delete notes.")
+    for note in notes:
         db.delete(note)
-        db.commit()
+    db.commit()
+    return len(notes)
 
 def search_notes(filters: List[str], db: Session = None) -> List[Note]:
     """Search for notes based on tag, keyword, or content filters."""

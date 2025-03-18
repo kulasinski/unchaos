@@ -15,6 +15,13 @@ poetry build
 python3 -m pip install --force-reinstall dist/*.whl --break-system-packages # Install it globally via pip
 ```
 
+## Usage
+
+### Add/create a note
+### Delete a note
+- by id (integer) `unchaos delete <id>`
+- by title (string) `unchaos delete <title>`
+
 ## Tips
 
 Run `sqlite3 ~/.unchaos/unchaos.db` to view the database.

@@ -62,8 +62,6 @@ TODO
 ## Example usage
 
 # TODO
-* wrap all in classes
-* sqlite storage
 * supabase storage
 * embeddings
 * chat

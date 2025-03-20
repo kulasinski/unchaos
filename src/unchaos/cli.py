@@ -6,6 +6,9 @@ import sys
 
 import toml
 import click
+from colorama import Fore, Style, init
+
+from unchaos.utils import flatten
 
 from .models import add_to_queue, create_note, add_snippet, get_notes, get_note_by_id, delete_notes, list_queue, search_notes, add_ai_entry, link_notes
 from .db import get_db
@@ -97,7 +100,6 @@ def add(title: str):
         if not content.strip():
             continue
         add_snippet(note.id, content, db=get_session())  # Adding snippet
-        click.echo(f"Snippet added to Note {note.id}")
 
 # --- Command to Delete a Note ---
 @click.command()
@@ -127,26 +129,38 @@ def delete(identifier: Union[str,int]):
 # --- Command to Show Notes ---
 @click.command()
 @click.argument("note_id", type=int)
-def show(note_id: int):
+@click.option("--width", type=int, default=50, help="Set the width for displaying the note")
+def show(note_id: int, width: int):
     """Displays a note by ID."""
     note = get_note_by_id(note_id, db=get_session())
 
     if not note:
-        click.echo(f"Note with ID {note_id} not found.")
+        click.echo(f"{Fore.RED}Note with ID {note_id} not found.")
         return
 
-    click.echo(f"Note Title: {note.title}")
-    click.echo(f"Created At: {note.created_at.isoformat()}")
-    click.echo("-" * 50)
+    click.echo("\n"+"=" * width)
+    click.echo(f"{Fore.CYAN}Note title:{Style.RESET_ALL} {note.title}")
+    click.echo(f"{Fore.CYAN}Created at: {note.created_at.isoformat()}{Style.RESET_ALL}")
+    click.echo("-" * width)
 
+    tags, keywords = set(), set()
     for snippet in note.snippets:
-        click.echo(f"Snippet ID: {snippet.id} | Content: {snippet.content}")
+        snippet_content = snippet.content
+        # Highlight tags and keywords
+        for tag in snippet.tags:
+            snippet_content = snippet_content.replace(f"#{tag.tag}", f"{Fore.GREEN}#{tag.tag}{Style.RESET_ALL}")
+        for keyword in snippet.keywords:
+            snippet_content = snippet_content.replace(f"@{keyword.keyword}", f"{Fore.MAGENTA}@{keyword.keyword}{Style.RESET_ALL}")
+        # Display snippet
+        click.echo(f"{Fore.CYAN}[{snippet.id}]{Style.RESET_ALL} {snippet_content}")
         # Display tags and keywords
-        tags = [tag.tag for tag in snippet.tags]
-        keywords = [keyword.keyword for keyword in snippet.keywords]
-        click.echo(f"Tags: {tags}")
-        click.echo(f"Keywords: {keywords}")
-        click.echo("-" * 50)
+        tags.update(tag.tag for tag in snippet.tags)
+        keywords.update(keyword.keyword for keyword in snippet.keywords)
+        
+    click.echo("-" * width)
+    click.echo(f"{Fore.CYAN}Keywords: {Fore.GREEN}{', '.join(['#'+kw for kw in keywords])}{Style.RESET_ALL}")
+    click.echo(f"{Fore.CYAN}Tags: {Fore.MAGENTA}{', '.join(['@'+tag for tag in tags])}{Style.RESET_ALL}")
+    click.echo("=" * width + "\n")
 
 # --- Command to List Notes ---
 @click.command()
@@ -154,7 +168,6 @@ def show(note_id: int):
 def list(filters: List[str]):
     """Lists notes based on provided filters (tags, keywords, or content)."""
     
-
     if not filters:
         print("WARNING: Listing ALL the notes... Please provide at least one filter (tag, keyword, or content) for better results.")
 
@@ -164,16 +177,18 @@ def list(filters: List[str]):
         click.echo(f"No notes found matching filters: {filters}")
         return
 
+    click.echo("-" * 100)
     for note in notes:
-        click.echo(f"Note ID: {note.id} | Title: {note.title} | Created At: {note.created_at.isoformat()}")
-        click.echo("-" * 50)
-        for snippet in note.snippets:
-            click.echo(f"Snippet ID: {snippet.id} | Content: {snippet.content}")
-            tags = [tag.tag for tag in snippet.tags]
-            keywords = [keyword.keyword for keyword in snippet.keywords]
-            click.echo(f"Tags: {tags}")
-            click.echo(f"Keywords: {keywords}")
-            click.echo("-" * 50)
+        tags = set(flatten([tag.tag for tag in snippet.tags] for snippet in note.snippets))
+        keywords = set(flatten([kw.keyword for kw in snippet.keywords] for snippet in note.snippets))
+        click.echo(f"{Fore.CYAN}ID:{Style.RESET_ALL} [{note.id}] | "\
+                   f"{Fore.CYAN}Title:{Style.RESET_ALL} {note.title} | "\
+                   f"{Fore.CYAN}Snippets:{Style.RESET_ALL} {len(note.snippets)} | "\
+                   f"{Fore.CYAN}Created at:{Style.RESET_ALL} {note.created_at.strftime('%Y-%m-%d %H:%M:%S')} | "
+                   f"{Fore.CYAN}Tags:{Style.RESET_ALL} {Fore.GREEN}{', '.join(['#'+tag for tag in tags])}{Style.RESET_ALL} | "\
+                   f"{Fore.CYAN}Keywords:{Style.RESET_ALL} {Fore.MAGENTA}{', '.join(['@'+kw for kw in keywords])}{Style.RESET_ALL}"
+        )
+        click.echo("-" * 100)
 
 # --- Command to Link Notes ---
 @click.command()

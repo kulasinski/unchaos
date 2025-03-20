@@ -7,7 +7,7 @@ import sys
 import toml
 import click
 
-from .models import add_to_queue, create_note, add_snippet, get_notes, get_note_by_id, delete_notes, search_notes, add_ai_entry, link_notes
+from .models import add_to_queue, create_note, add_snippet, get_notes, get_note_by_id, delete_notes, list_queue, search_notes, add_ai_entry, link_notes
 from .db import get_db
 from sqlalchemy.orm import Session
 from typing import List, Union
@@ -185,6 +185,31 @@ def link(from_note: int, to_note: int, relation: str):
     link_notes(from_note, to_note, relation, db=get_session())
     click.echo(f"Notes {from_note} and {to_note} linked with relation: {relation}")
 
+# --- Command to List Tasks in the Queue ---
+@click.command()
+def queue():
+    """Lists tasks in the queue."""
+    queue_items = list_queue(db=get_session())
+    click.echo(f"{len(queue_items)} tasks in the queue:")
+    for item in queue_items:
+        click.echo(f"Task ID: {item.id} | Note ID: {item.note_id} | Status: {item.status} | Created At: {item.created_at}")
+
+# --- Command to Delete the Database ---
+@click.command()
+def delete_db():
+    """Deletes the database file."""
+    config = toml.load(os.path.join(os.path.expanduser("~"), ".unchaos", "config.toml"))
+    db_path = config["database"]["path"]
+    """ Ask for confirmation before deleting the database """
+    confirmation = input(f"Danger! Are you sure you want to delete the database at {db_path}? (y/n): ")
+    if confirmation.lower() not in ["y", "yes"]:
+        return
+    if os.path.exists(db_path):
+        os.remove(db_path)
+        click.echo("Database deleted.")
+    else:
+        click.echo("Database file not found.")
+
 # --- AI Integration (Dummy) ---
 @click.command()
 @click.argument("note_id", type=int)
@@ -206,7 +231,9 @@ cli.add_command(delete)
 cli.add_command(show)
 cli.add_command(list)
 cli.add_command(link)
+cli.add_command(queue)
 cli.add_command(ai)
+cli.add_command(delete_db)
 
 if __name__ == "__main__":
     cli()  # Run the CLI application

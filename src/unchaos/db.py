@@ -25,7 +25,7 @@ class Note(Base):
     active = Column(Boolean, default=True)
 
     snippets = relationship("Snippet", back_populates="note", cascade="all, delete-orphan")
-    queue = relationship("Queue", back_populates="note", uselist=False)
+    queue = relationship("Queue", back_populates="note", uselist=False, cascade="all, delete-orphan")
 
 class Snippet(Base):
     __tablename__ = "snippets"

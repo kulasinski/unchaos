@@ -144,3 +144,7 @@ def add_to_queue(note_id: int, db: Session):
     queue_entry = Queue(note_id=note_id, status="pending", created_at=datetime.utcnow())
     db.add(queue_entry)
     db.commit()
+
+def list_queue(db: Session) -> List[Queue]:
+    """Lists all tasks in the queue."""
+    return db.query(Queue).all()

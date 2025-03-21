@@ -3,17 +3,18 @@ import os
 from datetime import datetime
 import signal
 import sys
+from typing import List, Union
 
 import toml
 import click
 from colorama import Fore, Style, init
+from sqlalchemy.orm import Session
 
+from unchaos.ai import assign_metadata_to_text
 from unchaos.utils import flatten
-
 from .models import add_to_queue, create_note, add_snippet, get_notes, get_note_by_id, delete_notes, list_queue, search_notes, add_ai_entry, link_notes
 from .db import get_db
-from sqlalchemy.orm import Session
-from typing import List, Union
+from .config import config
 
 @click.group()
 def cli():
@@ -236,6 +237,12 @@ def ai(note_id: int, content: str, content_type: str, model_name: str):
     ai_entry = add_ai_entry(note_id, None, content, content_type, model_name, db=get_session())
     click.echo(f"AI entry added to note {note_id} with model {model_name}. Content: {ai_entry.content[:30]}...")
 
+@click.command()
+def test():
+    """Test command for debugging. https://ollama.com/blog/structured-outputs """
+    output = assign_metadata_to_text("I told @Mike to meet me the next day at 10 am in starbucks. #todo \n\nI also need to buy some groceries.\n what is NLP??")
+    print(output)
+
 # ----------------------------
 # --- Registering commands ---
 # ----------------------------
@@ -249,6 +256,7 @@ cli.add_command(link)
 cli.add_command(queue)
 cli.add_command(ai)
 cli.add_command(delete_db)
+cli.add_command(test)
 
 if __name__ == "__main__":
     cli()  # Run the CLI application

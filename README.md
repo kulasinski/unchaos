@@ -66,7 +66,6 @@ TODO
 * embeddings
 * chat
 * smarter search
-* NERs from spacy
 * add quote field, next to tags and kws
 * leverage copilot workspace!
 * add: unchaos tags/kw to display those in use

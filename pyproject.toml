@@ -9,12 +9,15 @@ readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
     "colorama (>=0.4.6,<0.5.0)",
-    "alembic (>=1.15.1,<2.0.0)"
+    "alembic (>=1.15.1,<2.0.0)",
+    "ollama (>=0.4.7,<0.5.0)"
 ]
 
 [tool.poetry]
 packages = [{include = "unchaos", from = "src"}]
 
+[tool.poetry.dependencies]
+python = ">=3.11,<4.0"  # ✅ Explicitly define Python version
 
 [build-system]
 requires = ["poetry-core>=2.0.0,<3.0.0"]

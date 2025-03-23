@@ -1,5 +1,6 @@
 # db
 *.db
+*.lnk
 migrations/*
 
 # Byte-compiled / optimized / DLL files

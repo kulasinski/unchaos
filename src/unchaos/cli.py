@@ -10,11 +10,11 @@ import click
 from colorama import Fore, Style, init
 from sqlalchemy.orm import Session
 
-from unchaos.ai import assign_metadata_to_text, handle_queue_task
+# from unchaos.ai import assign_metadata_to_text, handle_queue_task
 from unchaos.utils import flatten
-from .models import add_note_to_queue, clear_queue, create_note, add_snippet, get_notes, get_note_by_id, delete_notes, list_queue, search_notes, add_ai_entry, link_notes
-from .db import QueueStatus, QueueTask, get_db
-from .config import config
+# from .models import add_note_to_queue, clear_queue, create_note, add_snippet, get_notes, get_note_by_id, delete_notes, list_queue, search_notes, add_ai_entry, link_notes
+# from .db import QueueStatus, QueueTask, get_db
+# from .config import config
 
 @click.group()
 def cli():
@@ -49,7 +49,7 @@ def init(db_location: str = None):
 
     # Overwrite the database location if provided
     if db_location:
-        db_location_ = db_location
+        db_location_ = os.path.join(os.path.abspath(db_location), "unchaos.db")
     else:
         db_location_ = os.path.join(config_dir, "unchaos.db")
 

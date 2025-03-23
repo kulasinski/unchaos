@@ -2,7 +2,7 @@ from sqlalchemy import Enum
 from sqlalchemy.orm import Session
 
 from .types import NoteMetadata
-from .db import NoteEntity, NoteKeyword, NoteTag, QueueTask, get_db, Note, Snippet, Tag, SnippetTag, Keyword, SnippetKeyword, AIEntry, Edge, Queue
+from .db import NoteEntity, NoteKeyword, NoteTag, QueueTask, get_db, Note, Snippet, NoteTag, SnippetTag, NoteKeyword, SnippetKeyword, AIEntry, Edge, Queue
 from datetime import datetime
 from typing import List, Optional
 import re

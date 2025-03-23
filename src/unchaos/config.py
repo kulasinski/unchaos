@@ -1,19 +1,9 @@
 import os
+import sys
+
 import toml
 
 CONFIG_PATH = os.path.expanduser("~/.unchaos/config.toml")
-
-DEFAULT_CONFIG = {
-    "storage": {
-        "database": os.path.expanduser("~/.unchaos/unchaos.db")
-    },
-    "ollama": {
-        "host": "http://localhost:11434"
-    },
-    "general": {
-        "debug": False
-    }
-}
 
 class Config:
     def __init__(self, path=CONFIG_PATH):
@@ -27,7 +17,9 @@ class Config:
                 return toml.load(self.path)
             except Exception as e:
                 print(f"⚠️ Error loading config file: {e}")
-        return DEFAULT_CONFIG.copy()
+        else:
+            print(f"⚠️ Config file not found at {self.path}. Did you forget to run `unchaos init`?")
+        sys.exit(1)
 
     def save_config(self):
         """Save the current config to the file."""

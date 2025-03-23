@@ -1,9 +1,11 @@
+from enum import Enum
 from sqlalchemy import (
     create_engine, Column, Integer, String, Boolean, DateTime, ForeignKey, Text
 )
 from sqlalchemy.orm import declarative_base, relationship, sessionmaker
 import os
 from datetime import datetime
+
 from .config import config
 
 # Load database path from config
@@ -26,6 +28,9 @@ class Note(Base):
 
     snippets = relationship("Snippet", back_populates="note", cascade="all, delete-orphan")
     queue = relationship("Queue", back_populates="note", uselist=False, cascade="all, delete-orphan")
+    tags = relationship("NoteTag", back_populates="note", cascade="all, delete-orphan")
+    keywords = relationship("NoteKeyword", back_populates="note", cascade="all, delete-orphan")
+    entities = relationship("NoteEntity", back_populates="note", cascade="all, delete-orphan")
 
 class Snippet(Base):
     __tablename__ = "snippets"
@@ -38,6 +43,7 @@ class Snippet(Base):
     note = relationship("Note", back_populates="snippets")
     tags = relationship("SnippetTag", back_populates="snippet", cascade="all, delete-orphan")
     keywords = relationship("SnippetKeyword", back_populates="snippet", cascade="all, delete-orphan")
+    entities = relationship("SnippetEntity", back_populates="snippet", cascade="all, delete-orphan")
 
 class Tag(Base):
     __tablename__ = "tags"
@@ -52,6 +58,14 @@ class SnippetTag(Base):
 
     snippet = relationship("Snippet", back_populates="tags")
 
+class NoteTag(Base):
+    __tablename__ = "note_tags"
+
+    note_id = Column(Integer, ForeignKey("notes.id", ondelete="CASCADE"), primary_key=True)
+    tag = Column(String(128), ForeignKey("tags.tag", ondelete="CASCADE"), primary_key=True)
+
+    note = relationship("Note", back_populates="tags")
+
 class Keyword(Base):
     __tablename__ = "keywords"
 
@@ -64,6 +78,35 @@ class SnippetKeyword(Base):
     keyword = Column(String(128), ForeignKey("keywords.keyword", ondelete="CASCADE"), primary_key=True)
 
     snippet = relationship("Snippet", back_populates="keywords")
+
+class NoteKeyword(Base):
+    __tablename__ = "note_keywords"
+
+    note_id = Column(Integer, ForeignKey("notes.id", ondelete="CASCADE"), primary_key=True)
+    keyword = Column(String(128), ForeignKey("keywords.keyword", ondelete="CASCADE"), primary_key=True)
+
+    note = relationship("Note", back_populates="keywords")
+
+class Entity(Base):
+    __tablename__ = "entities"
+
+    entity = Column(String(128), primary_key=True)  # Entities are unique
+
+class SnippetEntity(Base):
+    __tablename__ = "snippet_entities"
+
+    snippet_id = Column(Integer, ForeignKey("snippets.id", ondelete="CASCADE"), primary_key=True)
+    entity = Column(String(128), ForeignKey("entities.entity", ondelete="CASCADE"), primary_key=True)
+
+    snippet = relationship("Snippet", back_populates="entities")
+
+class NoteEntity(Base):
+    __tablename__ = "note_entities"
+
+    note_id = Column(Integer, ForeignKey("notes.id", ondelete="CASCADE"), primary_key=True)
+    entity = Column(String(128), ForeignKey("entities.entity", ondelete="CASCADE"), primary_key=True)
+
+    note = relationship("Note", back_populates="entities")
 
 class AIEntry(Base):
     __tablename__ = "ai"
@@ -85,12 +128,25 @@ class Edge(Base):
     to_note = Column(Integer, ForeignKey("notes.id", ondelete="CASCADE"), nullable=False)
     relation = Column(String, nullable=False)  # e.g., "causes", "relates_to"
 
+class QueueStatus(str, Enum):
+    PENDING = "PENDING"
+    PROCESSING = "PROCESSING"
+    COMPLETED = "COMPLETED"
+    FAILED = "FAILED"
+
+class QueueTask(str, Enum):
+    ASSIGN_METADATA = "ASSIGN_METADATA"
+    SUGGEST_NODES = "SUGGEST_NODES"
+    EMBED = "EMBED"
+
 class Queue(Base):
     __tablename__ = 'queue'
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     note_id = Column(Integer, ForeignKey('notes.id', ondelete="CASCADE"), nullable=False)
-    status = Column(String(50), nullable=False, default='pending')  # status could be "pending", "processing", etc.
+    status = Column(String(50), nullable=False, default=QueueStatus.PENDING.value)
+    status_details = Column(Text, nullable=True)
+    task = Column(String(50), nullable=False)
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
     updated_at = Column(DateTime, nullable=True, default=datetime.utcnow, onupdate=datetime.utcnow)
 

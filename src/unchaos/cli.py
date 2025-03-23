@@ -10,10 +10,10 @@ import click
 from colorama import Fore, Style, init
 from sqlalchemy.orm import Session
 
-from unchaos.ai import assign_metadata_to_text
+from unchaos.ai import assign_metadata_to_text, handle_queue_task
 from unchaos.utils import flatten
-from .models import add_to_queue, create_note, add_snippet, get_notes, get_note_by_id, delete_notes, list_queue, search_notes, add_ai_entry, link_notes
-from .db import get_db
+from .models import add_note_to_queue, clear_queue, create_note, add_snippet, get_notes, get_note_by_id, delete_notes, list_queue, search_notes, add_ai_entry, link_notes
+from .db import QueueStatus, QueueTask, get_db
 from .config import config
 
 @click.group()
@@ -85,7 +85,7 @@ def add(title: str):
 
     def handle_exit(sig, frame):
         click.echo("\nFinishing and saving note...")
-        add_to_queue(note.id, db=get_session())
+        add_note_to_queue(note.id, db=get_session())
         click.echo(f"Note {note.id} added to the queue.")
         sys.exit(0)
 
@@ -202,13 +202,41 @@ def link(from_note: int, to_note: int, relation: str):
     click.echo(f"Notes {from_note} and {to_note} linked with relation: {relation}")
 
 # --- Command to List Tasks in the Queue ---
-@click.command()
+@click.group()
 def queue():
+    """Manage tasks in the queue."""
+    pass
+
+@queue.command(name="list")
+def queue_list():
     """Lists tasks in the queue."""
+    def color_status(status: str):
+        if status == QueueStatus.PENDING:
+            return Fore.YELLOW + status + Style.RESET_ALL
+        elif status == QueueStatus.PROCESSING:
+            return Fore.CYAN + status + Style.RESET_ALL
+        elif status == QueueStatus.COMPLETED:
+            return Fore.GREEN + status + Style.RESET_ALL
+        elif status == QueueStatus.FAILED:
+            return Fore.RED + status + Style.RESET_ALL
+
     queue_items = list_queue(db=get_session())
     click.echo(f"{len(queue_items)} tasks in the queue:")
     for item in queue_items:
-        click.echo(f"Task ID: {item.id} | Note ID: {item.note_id} | Status: {item.status} | Created At: {item.created_at}")
+        click.echo(f"Task ID: {item.id} | Note ID: {item.note_id} | Task {item.task} | Status: {color_status(item.status)} | Created At: {item.created_at}")
+
+@queue.command(name="clear")
+def queue_clear():
+    """Clears all tasks in the queue."""
+    clear_queue(db=get_session())
+    click.echo("Queue cleared.")
+
+@queue.command(name="add")
+@click.argument("note_id", type=int)
+def queue_add(note_id: int):
+    """Adds a note to the queue for further processing."""
+    add_note_to_queue(note_id, db=get_session())
+    click.echo(f"Note {note_id} added to the queue.")
 
 # --- Command to Delete the Database ---
 @click.command()
@@ -238,6 +266,24 @@ def ai(note_id: int, content: str, content_type: str, model_name: str):
     click.echo(f"AI entry added to note {note_id} with model {model_name}. Content: {ai_entry.content[:30]}...")
 
 @click.command()
+def magick():
+    """ Do the unchaos magick with your notes."""
+    click.echo("🔮 Magick begins... Unchaosing your notes...")
+    
+    """ Getting tasks from the queue and the related notes """
+    tasks = list_queue(db=get_session())
+    """ Order tasks by the task type: ASSIGN_METADATA, SUGGEST_NODES, EMBED """
+    order = {QueueTask.ASSIGN_METADATA: 1, QueueTask.SUGGEST_NODES: 2, QueueTask.EMBED: 3}
+    tasks = sorted(tasks, key=lambda task: order[task.task])
+    db = get_session()
+    for task in tasks:
+        note = get_note_by_id(task.note_id, db=db)
+        handle_queue_task(task, note, db=db)
+    click.echo("🔮 Magick complete! ✅")
+
+# --- Tests ---
+
+@click.command()
 def test():
     """Test command for debugging. https://ollama.com/blog/structured-outputs """
     output = assign_metadata_to_text("I told @Mike to meet me the next day at 10 am in starbucks. #todo \n\nI also need to buy some groceries.\n what is NLP??")
@@ -254,7 +300,7 @@ cli.add_command(show)
 cli.add_command(list)
 cli.add_command(link)
 cli.add_command(queue)
-cli.add_command(ai)
+cli.add_command(magick)
 cli.add_command(delete_db)
 cli.add_command(test)
 

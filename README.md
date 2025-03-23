@@ -1,6 +1,7 @@
 # unchaos
 Your git for Notes.
  Take notes like pro - enhanced with AI
+ Take notes the way our brain works - it is not linear!
 
 Locally:
 
@@ -30,7 +31,7 @@ python3 -m pip install --force-reinstall dist/*.whl --break-system-packages # In
 ## Migrations
 
 poetry run alembic revision --autogenerate -m "Initial migration"
-Apply Migration: alembic upgrade head
+Apply Migration: poetry run alembic upgrade head
 
 ## Structure
 
@@ -63,8 +64,8 @@ TODO
 
 # TODO
 * supabase storage
-* embeddings
-* chat
+* tabela do urli i quotesów i pytań (2 ostatnie moze tylko przez tagi?)- regex 
+* chat - oparty na SQL searchu + semantic search
 * smarter search
 * add quote field, next to tags and kws
 * leverage copilot workspace!

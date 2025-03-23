@@ -1,7 +1,12 @@
 from typing import Annotated, Any, List, Sequence, Union
+
 from ollama import EmbedResponse, chat, embed as embed_ollama
 from pydantic import BaseModel
+from sqlalchemy.orm import Session
 
+from unchaos.db import Note, Queue, QueueStatus, QueueTask
+from unchaos.models import update_note_metadata
+from unchaos.types import NoteMetadata, SuggestedNodes
 from .config import config
 
 """ Load relevant configuration parameters. """
@@ -9,23 +14,6 @@ model_basic = config.get("llm.model_basic")
 model_reason = config.get("llm.model_reason")
 model_embedding = config.get("llm.model_embedding")
 graph_roots = config.get("graph.roots")
-
-class NoteMetadata(BaseModel):
-    tags: List[str] = []
-    keywords: List[str] = []
-    entities: List[str] = []
-
-    def strip_prefixes(self):
-        self.tags = [tag.strip("#") for tag in self.tags]
-        self.keywords = [keyword.strip("@") for keyword in self.keywords]
-
-class SuggestedNodes(BaseModel):
-    nested_nodes: List[str] = []
-
-    def split_nested_nodes(self) -> List[List[str]]:
-        def split_node(node: str):
-            return [n.strip() for n in node.split(">")]
-        return [split_node(node) for node in self.nested_nodes]
 
 def generate_formatted_output(format: Any,  model_name: str, sys_prompt: str = None, user_prompt: str = None) -> BaseModel:
     if not any([sys_prompt, user_prompt]):
@@ -119,3 +107,36 @@ def embed(input: Union[str, List[str]]) -> Union[Sequence[Sequence[float]], Sequ
         return embed_response.embeddings[0]
     else:
         return embed_response.embeddings
+    
+def handle_queue_task(task: Queue, note: Note, db: Session):
+    """Handle a task from the queue."""
+    print(f"Handling task {task.task} for note {note.id}...")
+    status = None
+    status_details = None
+
+    """ Update the note with the metadata. """
+    if task.task == QueueTask.ASSIGN_METADATA:
+        try:
+            note_snippets = '\n'.join([snippet.content for snippet in note.snippets])
+            metadata = assign_metadata_to_text(note_snippets)
+            update_note_metadata(note, metadata, db=db)
+            status = QueueStatus.COMPLETED  
+        except ConnectionError as e:
+            print(f"Error assigning metadata: {e}")
+            raise e
+        except Exception as e:
+            print(f"Error assigning metadata: {e}")
+            raise e
+            status = QueueStatus.FAILED
+            status_details = str(e)
+    else:
+        print(f"Task not recognized: {task.task}")
+        # status = QueueStatus.FAILED
+        # status_details = "Task not recognized"
+
+
+    """ Update the status of the task in the database after processing. """
+    # task.status = status
+    # task.status_details = status_details
+    # task.updated_at = datetime.utcnow()
+    # db.commit()

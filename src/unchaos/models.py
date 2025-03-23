@@ -1,5 +1,8 @@
+from sqlalchemy import Enum
 from sqlalchemy.orm import Session
-from .db import get_db, Note, Snippet, Tag, SnippetTag, Keyword, SnippetKeyword, AIEntry, Edge, Queue
+
+from .types import NoteMetadata
+from .db import NoteEntity, NoteKeyword, NoteTag, QueueTask, get_db, Note, Snippet, Tag, SnippetTag, Keyword, SnippetKeyword, AIEntry, Edge, Queue
 from datetime import datetime
 from typing import List, Optional
 import re
@@ -112,6 +115,27 @@ def search_notes(filters: List[str], db: Session = None) -> List[Note]:
 
     return query.distinct().all()
 
+def update_note_metadata(note: Note, metadata: NoteMetadata, db: Session = None):
+    """Updates the metadata of a note."""
+    db = db or next(get_db())
+
+    # Clear existing relationships to avoid duplicates
+    note.tags.clear()
+    note.keywords.clear()
+    note.entities.clear()
+
+    # Add new relationships properly
+    note.tags.extend([NoteTag(tag=tag, note_id=note.id) for tag in metadata.tags])
+    note.keywords.extend([NoteKeyword(keyword=kw, note_id=note.id) for kw in metadata.keywords])
+    note.entities.extend([NoteEntity(entity=entity, note_id=note.id) for entity in metadata.entities])
+
+    db.add(note)  # Explicitly add the note to the session
+    db.commit()
+    db.refresh(note)  # Refresh to reflect new DB state
+
+    print(f"✅ Updated metadata for note ID={note.id} with tags={metadata.tags}, keywords={metadata.keywords}, entities={metadata.entities}")
+
+# DUMMY
 def add_ai_entry(note_id: int, snippet_id: Optional[int], content: str, content_type: str, model_name: str, db: Session = None):
     """Adds an AI-generated entry (embedding, summary, chat response)."""
     db = db or next(get_db())
@@ -138,13 +162,27 @@ def link_notes(from_note: int, to_note: int, relation: str, db: Session = None):
     db.commit()
     return edge
 
-# Function to add note to queue
-def add_to_queue(note_id: int, db: Session):
+# QUEUE OPERATIONS
+
+def add_note_to_queue(note_id: int, db: Session):
     """Adds a newly created note to the queue for further processing."""
-    queue_entry = Queue(note_id=note_id, status="pending", created_at=datetime.utcnow())
-    db.add(queue_entry)
+    for task in [
+        QueueTask.ASSIGN_METADATA,
+        QueueTask.SUGGEST_NODES,
+        QueueTask.EMBED,
+    ]:
+        queue_entry = Queue(
+            note_id=note_id, 
+            task=task,
+        )
+        db.add(queue_entry)
     db.commit()
 
 def list_queue(db: Session) -> List[Queue]:
     """Lists all tasks in the queue."""
     return db.query(Queue).all()
+
+def clear_queue(db: Session):
+    """Clears all tasks in the queue."""
+    db.query(Queue).delete()
+    db.commit()

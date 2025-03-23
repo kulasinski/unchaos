@@ -33,7 +33,8 @@ def get_session() -> Session:
 
 # --- Command to Initialize the System ---
 @click.command()
-def init():
+@click.option("--db_location", type=str, help="Overwrite the location of the database file")
+def init(db_location: str = None):
     """Initializes the system: creates the configuration file and sets up the database."""
     
     # Ensure the user has the necessary directories
@@ -45,14 +46,31 @@ def init():
     
     # Create the config file if it does not exist
     config_path = os.path.join(config_dir, "config.toml")
+
+    # Overwrite the database location if provided
+    if db_location:
+        db_location_ = db_location
+    else:
+        db_location_ = os.path.join(config_dir, "unchaos.db")
+
     if not os.path.exists(config_path):
         config_data = {
             "database": {
-                "path": os.path.join(config_dir, "unchaos.db")
+                "path": db_location_
             },
             "llm": {
                 "host": "localhost",
-                "port": 11411  # Default port for Ollama, for example
+                "port": 11411,  # Default port for Ollama, for example
+                "model_basic": "llama3.2:3b",
+                "model_reason": "qwen2.5:14b", # deepseek-r1:8b
+                "model_embedding": "nomic-embed-text"
+            },
+            "graph": {
+                "roots": [
+                    "Work",
+                    "Personal",
+                    "Household",
+                ]
             }
         }
         with open(config_path, "w") as config_file:

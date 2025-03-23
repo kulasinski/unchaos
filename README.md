@@ -58,7 +58,8 @@ unchaos/
 │── README.md               # Documentation
 
 ## Init
-TODO
+
+`unchaos init --db_location <path to db file>`
 
 ## Example usage
 

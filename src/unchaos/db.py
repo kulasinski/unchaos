@@ -15,7 +15,8 @@ SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 Base = declarative_base()
 
-# --- Table Definitions ---
+# --- Core Tables ---
+
 class Note(Base):
     __tablename__ = "notes"
 
@@ -31,6 +32,7 @@ class Note(Base):
     tags = relationship("NoteTag", back_populates="note", cascade="all, delete-orphan")
     keywords = relationship("NoteKeyword", back_populates="note", cascade="all, delete-orphan")
     entities = relationship("NoteEntity", back_populates="note", cascade="all, delete-orphan")
+    urls = relationship("NoteURL", back_populates="note", cascade="all, delete-orphan")
 
 class Snippet(Base):
     __tablename__ = "snippets"
@@ -41,35 +43,49 @@ class Snippet(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
     note = relationship("Note", back_populates="snippets")
+
     tags = relationship("SnippetTag", back_populates="snippet", cascade="all, delete-orphan")
     keywords = relationship("SnippetKeyword", back_populates="snippet", cascade="all, delete-orphan")
     entities = relationship("SnippetEntity", back_populates="snippet", cascade="all, delete-orphan")
+    urls = relationship("SnippetURL", back_populates="snippet", cascade="all, delete-orphan")
 
-class Tag(Base):
-    __tablename__ = "tags"
+class Token(Base):
+    __tablename__ = "tokens"
 
-    tag = Column(String(128), primary_key=True)  # Tags are unique
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    value = Column(String(256), unique=True, nullable=False)  # Unique tokens
+
+    def __repr__(self):
+        return f"<Token(value={self.value})>"
+
+# --- Linking Tables ---
+
+# class Tag(Base):
+#     __tablename__ = "tags"
+
+#     tag = Column(String(128), primary_key=True)  # Tags are unique
 
 class SnippetTag(Base):
     __tablename__ = "snippet_tags"
 
     snippet_id = Column(Integer, ForeignKey("snippets.id", ondelete="CASCADE"), primary_key=True)
-    tag = Column(String(128), ForeignKey("tags.tag", ondelete="CASCADE"), primary_key=True)
+    tag_id = Column(Integer, ForeignKey("tokens.id", ondelete="CASCADE"), primary_key=True)
 
     snippet = relationship("Snippet", back_populates="tags")
+    tags = relationship("Token")
 
 class NoteTag(Base):
     __tablename__ = "note_tags"
 
     note_id = Column(Integer, ForeignKey("notes.id", ondelete="CASCADE"), primary_key=True)
-    tag = Column(String(128), ForeignKey("tags.tag", ondelete="CASCADE"), primary_key=True)
+    # tag = Column(String(128), ForeignKey("tags.tag", ondelete="CASCADE"), primary_key=True)
 
     note = relationship("Note", back_populates="tags")
 
-class Keyword(Base):
-    __tablename__ = "keywords"
+# class Keyword(Base):
+#     __tablename__ = "keywords"
 
-    keyword = Column(String(128), primary_key=True)  # Keywords are unique
+#     keyword = Column(String(128), primary_key=True)  # Keywords are unique
 
 class SnippetKeyword(Base):
     __tablename__ = "snippet_keywords"
@@ -87,10 +103,10 @@ class NoteKeyword(Base):
 
     note = relationship("Note", back_populates="keywords")
 
-class Entity(Base):
-    __tablename__ = "entities"
+# class Entity(Base):
+#     __tablename__ = "entities"
 
-    entity = Column(String(128), primary_key=True)  # Entities are unique
+#     entity = Column(String(128), primary_key=True)  # Entities are unique
 
 class SnippetEntity(Base):
     __tablename__ = "snippet_entities"

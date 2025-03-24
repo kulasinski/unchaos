@@ -2,7 +2,7 @@ from sqlalchemy import Enum
 from sqlalchemy.orm import Session
 
 from .types import NoteMetadata
-from .db import NoteEntity, NoteKeyword, NoteTag, QueueTask, get_db, Note, Snippet, NoteTag, SnippetTag, NoteKeyword, SnippetKeyword, AIEntry, Edge, Queue
+from .db import NoteEntityDB, NoteKeywordDB, NoteTagDB, QueueTask, get_db, NoteDB, SnippetDB, TokenDB, NoteTagDB, SnippetTagDB, NoteKeywordDB, SnippetKeywordDB, AIEntry, Edge, QueueDB
 from datetime import datetime
 from typing import List, Optional
 import re
@@ -19,70 +19,79 @@ def extract_tags_and_keywords(text: str):
     return set(tags), set(keywords)
 
 # --- CRUD Operations ---
-def create_note(title: str = "untitled", db: Session = None) -> Note:
+
+def get_or_create_token(value: str, db: Session = None) -> TokenDB:
+    """Retrieves or creates a token by value."""
+    db = db or next(get_db())
+    token = db.query(TokenDB).filter_by(value=value).first()
+    if not token:
+        token = TokenDB(value=value)
+        db.add(token)
+        db.commit()  # Commit to ensure the token ID is generated
+    return token
+
+def create_note(title: str = "untitled", db: Session = None) -> NoteDB:
     """Creates a new note with a title."""
     db = db or next(get_db())
-    new_note = Note(title=title)
+    new_note = NoteDB(title=title)
     db.add(new_note)
     db.commit()
     db.refresh(new_note)
     return new_note
 
-def add_snippet(note_id: int, content: str, db: Session = None) -> Snippet:
+def add_snippet(note_id: int, content: str, db: Session = None) -> SnippetDB:
     """Adds a snippet to a note and extracts tags/keywords."""
     db = db or next(get_db())
     
-    new_snippet = Snippet(note_id=note_id, content=content)
+    new_snippet = SnippetDB(note_id=note_id, content=content)
     db.add(new_snippet)
     db.commit()
     db.refresh(new_snippet)
 
     # Extract tags and keywords
     tags, keywords = extract_tags_and_keywords(content)
-    
+
     # Insert tags
     for tag in tags:
-        if not db.query(Tag).filter_by(tag=tag).first():
-            db.add(Tag(tag=tag))
-        db.add(SnippetTag(snippet_id=new_snippet.id, tag=tag))
+        token = get_or_create_token(tag, db=db)
+        db.add(SnippetTagDB(snippet_id=new_snippet.id, token_id=token.id))
 
     # Insert keywords
     for keyword in keywords:
-        if not db.query(Keyword).filter_by(keyword=keyword).first():
-            db.add(Keyword(keyword=keyword))
-        db.add(SnippetKeyword(snippet_id=new_snippet.id, keyword=keyword))
+        token = get_or_create_token(keyword, db=db)
+        db.add(SnippetKeywordDB(snippet_id=new_snippet.id, token_id=token.id))
 
     db.commit()
     return new_snippet
 
-def get_notes(db: Session = None) -> List[Note]:
+def get_notes(db: Session = None) -> List[NoteDB]:
     """Retrieves all active notes."""
     db = db or next(get_db())
-    return db.query(Note).filter(Note.active == True).all()
+    return db.query(NoteDB).filter(NoteDB.active == True).all()
 
-def get_note_by_id(note_id: int, db: Session = None) -> Optional[Note]:
+def get_note_by_id(note_id: int, db: Session = None) -> Optional[NoteDB]:
     """Retrieves a note by ID."""
     db = db or next(get_db())
-    return db.query(Note).filter_by(id=note_id, active=True).first()
+    return db.query(NoteDB).filter_by(id=note_id).first()
 
 def archive_note(note_id: int, db: Session = None):
     """Deletes a note (soft delete)."""
     db = db or next(get_db())
-    note = db.query(Note).filter_by(id=note_id).first()
+    note = db.query(NoteDB).filter_by(id=note_id).first()
     if note:
         note.active = False
         db.commit()
 
-def delete_notes(id: int, title: str = None, db: Session = None):
+def delete_notes(id: int, title: str = None, confirm: bool = True, db: Session = None):
     """Permanently deletes multiple notes."""
     db = db or next(get_db())
     if id:
-        notes = db.query(Note).filter(Note.id == id).all()
+        notes = db.query(NoteDB).filter(NoteDB.id == id).all()
     elif title:
         if '*' in title:
-            notes = db.query(Note).filter(Note.title.like(title.replace('*', '%'))).all()
+            notes = db.query(NoteDB).filter(NoteDB.title.like(title.replace('*', '%'))).all()
         else:
-            notes = db.query(Note).filter(Note.title == title).all()
+            notes = db.query(NoteDB).filter(NoteDB.title == title).all()
     else:
         raise ValueError("Please provide either an ID or title to delete notes.")
     
@@ -90,32 +99,33 @@ def delete_notes(id: int, title: str = None, db: Session = None):
         return 0
     
     """ Confirm deletion of notes """
-    confirmation = input(f"Are you sure you want to delete {len(notes)} note(s)? (y/n): ")
-    if confirmation.lower() not in ["y", "yes"]:
-        return None
+    if confirm:
+        confirmation = input(f"Are you sure you want to delete {len(notes)} note(s)? (y/n): ")
+        if confirmation.lower() not in ["y", "yes"]:
+            return None
 
     for note in notes:
         db.delete(note)
     db.commit()
     return len(notes)
 
-def search_notes(filters: List[str], db: Session = None) -> List[Note]:
+def search_notes(filters: List[str], db: Session = None) -> List[NoteDB]:
     """Search for notes based on tag, keyword, or content filters."""
     db = db or next(get_db())
 
-    query = db.query(Note).join(Snippet).outerjoin(SnippetTag).outerjoin(SnippetKeyword)
+    query = db.query(NoteDB).join(SnippetDB).outerjoin(SnippetTagDB).outerjoin(SnippetKeywordDB)
 
     for filter_str in filters:
         if filter_str.startswith("#"):
-            query = query.filter(SnippetTag.tag == filter_str[1:])
+            query = query.filter(SnippetTagDB.tag == filter_str[1:])
         elif filter_str.startswith("@"):
-            query = query.filter(SnippetKeyword.keyword == filter_str[1:])
+            query = query.filter(SnippetKeywordDB.keyword == filter_str[1:])
         else:
-            query = query.filter(Snippet.content.ilike(f"%{filter_str}%"))
+            query = query.filter(SnippetDB.content.ilike(f"%{filter_str}%"))
 
     return query.distinct().all()
 
-def update_note_metadata(note: Note, metadata: NoteMetadata, db: Session = None):
+def update_note_metadata(note: NoteDB, metadata: NoteMetadata, db: Session = None):
     """Updates the metadata of a note."""
     db = db or next(get_db())
 
@@ -125,9 +135,9 @@ def update_note_metadata(note: Note, metadata: NoteMetadata, db: Session = None)
     note.entities.clear()
 
     # Add new relationships properly
-    note.tags.extend([NoteTag(tag=tag, note_id=note.id) for tag in metadata.tags])
-    note.keywords.extend([NoteKeyword(keyword=kw, note_id=note.id) for kw in metadata.keywords])
-    note.entities.extend([NoteEntity(entity=entity, note_id=note.id) for entity in metadata.entities])
+    note.tags.extend([NoteTagDB(tag=tag, note_id=note.id) for tag in metadata.tags])
+    note.keywords.extend([NoteKeywordDB(keyword=kw, note_id=note.id) for kw in metadata.keywords])
+    note.entities.extend([NoteEntityDB(entity=entity, note_id=note.id) for entity in metadata.entities])
 
     db.add(note)  # Explicitly add the note to the session
     db.commit()
@@ -164,25 +174,26 @@ def link_notes(from_note: int, to_note: int, relation: str, db: Session = None):
 
 # QUEUE OPERATIONS
 
-def add_note_to_queue(note_id: int, db: Session):
+def add_note_to_queue(note_id: int, db: Session = None):
     """Adds a newly created note to the queue for further processing."""
+    db = db or next(get_db())
     for task in [
         QueueTask.ASSIGN_METADATA,
         QueueTask.SUGGEST_NODES,
         QueueTask.EMBED,
     ]:
-        queue_entry = Queue(
+        queue_entry = QueueDB(
             note_id=note_id, 
             task=task,
         )
         db.add(queue_entry)
     db.commit()
 
-def list_queue(db: Session) -> List[Queue]:
+def list_queue(db: Session) -> List[QueueDB]:
     """Lists all tasks in the queue."""
-    return db.query(Queue).all()
+    return db.query(QueueDB).all()
 
 def clear_queue(db: Session):
     """Clears all tasks in the queue."""
-    db.query(Queue).delete()
+    db.query(QueueDB).delete()
     db.commit()

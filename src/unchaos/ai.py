@@ -4,7 +4,7 @@ from ollama import EmbedResponse, chat, embed as embed_ollama
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from unchaos.db import Note, Queue, QueueStatus, QueueTask
+from unchaos.db import NoteDB, QueueDB, QueueStatus, QueueTask
 from unchaos.models import update_note_metadata
 from unchaos.types import NoteMetadata, SuggestedNodes
 from .config import config
@@ -108,7 +108,7 @@ def embed(input: Union[str, List[str]]) -> Union[Sequence[Sequence[float]], Sequ
     else:
         return embed_response.embeddings
     
-def handle_queue_task(task: Queue, note: Note, db: Session):
+def handle_queue_task(task: QueueDB, note: NoteDB, db: Session):
     """Handle a task from the queue."""
     print(f"Handling task {task.task} for note {note.id}...")
     status = None

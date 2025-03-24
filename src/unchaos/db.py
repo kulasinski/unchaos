@@ -1,11 +1,13 @@
 from enum import Enum
+from datetime import datetime
+import os
+
 from sqlalchemy import (
     create_engine, Column, Integer, String, Boolean, DateTime, ForeignKey, Text
 )
-from sqlalchemy.orm import declarative_base, relationship, sessionmaker
-import os
-from datetime import datetime
+from sqlalchemy.orm import declarative_base, relationship, sessionmaker, Session
 
+from unchaos.types import QueueStatus
 from .config import config
 
 # Load database path from config
@@ -33,7 +35,7 @@ class NoteDB(Base):
     active = Column(Boolean, default=True)
 
     snippets = relationship("SnippetDB", back_populates="note", cascade="all, delete-orphan")
-    queue = relationship("QueueDB", back_populates="note", uselist=False, cascade="all, delete-orphan")
+    queue = relationship("QueueDB", back_populates="note", cascade="all, delete-orphan")
     tags = relationship("NoteTagDB", back_populates="note", cascade="all, delete-orphan")
     keywords = relationship("NoteKeywordDB", back_populates="note", cascade="all, delete-orphan")
     entities = relationship("NoteEntityDB", back_populates="note", cascade="all, delete-orphan")
@@ -46,9 +48,9 @@ class SnippetDB(Base):
     note_id = Column(Integer, ForeignKey("notes.id", ondelete="CASCADE"), nullable=False)
     content = Column(Text, nullable=False)
     created_at = Column(DateTime, default=datetime.now)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
 
     note = relationship("NoteDB", back_populates="snippets")
-
     tags = relationship("SnippetTagDB", back_populates="snippet", cascade="all, delete-orphan")
     keywords = relationship("SnippetKeywordDB", back_populates="snippet", cascade="all, delete-orphan")
 
@@ -148,17 +150,6 @@ class EdgeDB(Base):
     to_note = Column(Integer, ForeignKey("notes.id", ondelete="CASCADE"), nullable=False)
     relation = Column(String, nullable=False)  # e.g., "causes", "relates_to"
 
-class QueueStatus(str, Enum):
-    PENDING = "PENDING"
-    PROCESSING = "PROCESSING"
-    COMPLETED = "COMPLETED"
-    FAILED = "FAILED"
-
-class QueueTask(str, Enum):
-    ASSIGN_METADATA = "ASSIGN_METADATA"
-    SUGGEST_NODES = "SUGGEST_NODES"
-    EMBED = "EMBED"
-
 class QueueDB(Base):
     __tablename__ = 'queue'
 
@@ -180,6 +171,18 @@ def init_db():
     """Initialize the database schema."""
     Base.metadata.create_all(bind=engine)
     print(f"✅ Database initialized at {DB_PATH}")
+
+# -- Helper Functions
+
+def get_or_create_token(value: str, db: Session = None) -> TokenDB:
+    """Retrieves or creates a token by value."""
+    db = db or next(get_db())
+    token = db.query(TokenDB).filter_by(value=value).first()
+    if not token:
+        token = TokenDB(value=value)
+        db.add(token)
+        db.commit()  # Commit to ensure the token ID is generated
+    return token
 
 # --- Session Helper ---
 def get_db():

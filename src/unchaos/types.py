@@ -1,3 +1,4 @@
+from enum import Enum
 from pydantic import BaseModel
 from typing import List
 
@@ -17,3 +18,14 @@ class SuggestedNodes(BaseModel):
         def split_node(node: str):
             return [n.strip() for n in node.split(">")]
         return [split_node(node) for node in self.nested_nodes]
+    
+class QueueStatus(str, Enum):
+    PENDING = "PENDING"
+    PROCESSING = "PROCESSING"
+    COMPLETED = "COMPLETED"
+    FAILED = "FAILED"
+
+class QueueTask(str, Enum):
+    ASSIGN_METADATA = "ASSIGN_METADATA"
+    SUGGEST_NODES = "SUGGEST_NODES"
+    EMBED = "EMBED"

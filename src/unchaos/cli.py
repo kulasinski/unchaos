@@ -11,8 +11,8 @@ from colorama import Fore, Style, init
 from sqlalchemy.orm import Session
 
 # from unchaos.ai import assign_metadata_to_text, handle_queue_task
-from unchaos.utils import flatten
-# from .models import add_note_to_queue, clear_queue, create_note, add_snippet, get_notes, get_note_by_id, delete_notes, list_queue, search_notes, add_ai_entry, link_notes
+from .utils import flatten
+from .models import Note
 # from .db import QueueStatus, QueueTask, get_db
 # from .config import config
 
@@ -89,23 +89,26 @@ def init(db_location: str = None):
 @click.argument("title", default=None, required=False)
 def create(title: str):
     """Creates a new note with the given title."""
-    from .models import create_note, add_snippet, add_note_to_queue, delete_notes
 
-    if not title:
-        title = f"untitled ({datetime.now().strftime("%Y-%m-%d %H:%M:%S")})"
     # Create a new note
-    note = create_note(title=title, db=None)
+    note = Note(
+        title=title,
+    )
+
+    # Persist the note to the database
+    note.persist()
+
     click.echo(f"Note created with ID: {note.id} and title: {note.title}")
     click.echo("Enter snippets one by one. (Ctrl+D to save note, Ctrl+C to discard note):")
 
     def handle_interrupt(sig, frame):
         click.echo("\nCancelling and deleting note...")
-        delete_notes(note.id, confirm=False, db=None)  # Deleting the note on Ctrl+C
+        note.delete(confirm=False)  # Deleting the note on Ctrl+C
         sys.exit(0)
 
     def handle_exit(sig, frame):
         click.echo("\nFinishing and saving note...")
-        add_note_to_queue(note.id, db=None)
+        note.to_queue()
         click.echo(f"Note {note.id} added to the queue.")
         sys.exit(0)
 
@@ -120,7 +123,7 @@ def create(title: str):
             handle_exit(None, None)
         if not content.strip():
             continue
-        add_snippet(note.id, content, db=None)  # Adding snippet
+        note.add_snippet(content)  # Adding snippet
 
 # --- Command to Delete a Note ---
 @click.command()
@@ -129,7 +132,6 @@ def delete(identifier: Union[str,int]):
     """
     Delete a note by its ID or name.
     """
-    from .models import delete_notes
 
     # Infer the type of identifier (ID or name) and find the note
     id, title = None, None
@@ -138,7 +140,7 @@ def delete(identifier: Union[str,int]):
     except ValueError:
         title = identifier
 
-    len_notes_deleted = delete_notes(id=id, title=title, db=None)
+    len_notes_deleted = Note.deleteAll(id=id, title=title, db=None)
 
     if not len_notes_deleted:
         click.echo(f"No notes deleted.")
@@ -190,12 +192,13 @@ def show(note_id: int, width: int):
 @click.argument("filters", nargs=-1)
 def list(filters: List[str]):
     """Lists notes based on provided filters (tags, keywords, or content)."""
-    from .models import search_notes
-    
-    if not filters:
-        print("WARNING: Listing ALL the notes... Please provide at least one filter (tag, keyword, or content) for better results.")
 
-    notes = search_notes(filters, db=None)
+    notes = Note.search(filters)
+
+    if not filters:
+        click.echo(f"WARNING: Listing ALL {len(notes)} notes... Please provide at least one filter (tag, keyword, or content) for better results.")
+    else:
+        click.echo(f"Found {len(notes)} notes matching filters: {filters}")
 
     if not notes:
         click.echo(f"No notes found matching filters: {filters}")
@@ -204,24 +207,24 @@ def list(filters: List[str]):
     click.echo("-" * 100)
     for note in notes:
         # note-level tokens
-        note_tags = set(tag.tag.value for tag in note.tags)
-        note_keywords = set(kw.keyword.value for kw in note.keywords)
+        # note_tags = set(tag.tag.value for tag in note.tags)
+        # note_keywords = set(kw.keyword.value for kw in note.keywords)
 
         # snippet-level tokens
-        snippet_tags = set(flatten([tag.tag.value for tag in snippet.tags] for snippet in note.snippets))
-        snippet_keywords = set(flatten([kw.keyword.value for kw in snippet.keywords] for snippet in note.snippets))
+        # snippet_tags = set(flatten([tag.tag.value for tag in snippet.tags] for snippet in note.snippets))
+        # snippet_keywords = set(flatten([kw.keyword.value for kw in snippet.keywords] for snippet in note.snippets))
 
         # unioned tokens
-        tags = note_tags.union(snippet_tags)
-        keywords = note_keywords.union(snippet_keywords)
+        # tags = note_tags.union(snippet_tags)
+        # keywords = note_keywords.union(snippet_keywords)
 
 
         click.echo(f"{Fore.CYAN}ID:{Style.RESET_ALL} [{note.id}] | "\
                    f"{Fore.CYAN}Title:{Style.RESET_ALL} {note.title} | "\
                    f"{Fore.CYAN}Snippets:{Style.RESET_ALL} {len(note.snippets)} | "\
                    f"{Fore.CYAN}Created at:{Style.RESET_ALL} {note.created_at.strftime('%Y-%m-%d %H:%M:%S')} | "
-                   f"{Fore.CYAN}Tags:{Style.RESET_ALL} {Fore.GREEN}{', '.join(['#'+tag for tag in tags])}{Style.RESET_ALL} | "\
-                   f"{Fore.CYAN}Keywords:{Style.RESET_ALL} {Fore.MAGENTA}{', '.join(['@'+kw for kw in keywords])}{Style.RESET_ALL}"
+                   f"{Fore.CYAN}Tags:{Style.RESET_ALL} {Fore.GREEN}{', '.join(['#'+tag for tag in note.tagsAll])}{Style.RESET_ALL} | "\
+                   f"{Fore.CYAN}Keywords:{Style.RESET_ALL} {Fore.MAGENTA}{', '.join(['@'+kw for kw in note.keywordsAll])}{Style.RESET_ALL}"
         )
         click.echo("-" * 100)
 

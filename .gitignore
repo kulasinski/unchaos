@@ -1,6 +1,7 @@
 # db
 *.db
 *.lnk
+alembic.ini
 migrations/*
 
 # Byte-compiled / optimized / DLL files

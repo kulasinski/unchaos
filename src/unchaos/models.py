@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 
 from .types import NoteMetadata, QueueTask
 from .db import NoteEntityDB, NoteKeywordDB, NoteTagDB, NoteURLDB, get_session, NoteDB, SnippetDB, NoteTagDB, SnippetTagDB, NoteKeywordDB, SnippetKeywordDB, QueueDB, get_or_create_token
-from .utils import clear_terminal_line, containsTagsOnly, extract_tags_and_keywords, now_formatted
+from .utils import clear_terminal, clear_terminal_line, containsTagsOnly, extract_tags_and_keywords, fwarn, now_formatted, fsys
 
 class Snippet(BaseModel):
     id: int = None
@@ -131,36 +131,46 @@ class Note(BaseModel):
 
     # --- Input ---
 
-    def input(self, handle_interrupt=True, handle_exit=True):
+    def input(self, db: Session = None):
         """Interactive input for note creation or update."""
-        
-        print("Enter snippets one by one. (Ctrl+D to save note, Ctrl+C to discard note):")
-
-        def handle_interrupt(sig, frame):
-            print("\nCancelling and deleting note...")
-            self.delete(confirm=False)  # Deleting the note on Ctrl+C
-            sys.exit(0)
+        db = db or get_session()
 
         def handle_exit(sig, frame):
-            print("\nFinishing and saving note...")
+            clear_terminal_line()
+            print(f"\n{Fore.CYAN}Finishing and saving note...{Style.RESET_ALL}")
             self.to_queue()
-            print(f"Note {self.id} added to the queue.")
+            print(f"{Fore.CYAN}✅ Note{Style.RESET_ALL} {self.id} {Fore.CYAN}added to the queue.{Style.RESET_ALL}")
             sys.exit(0)
 
-        if handle_interrupt:
-            signal.signal(signal.SIGINT, handle_interrupt)
-        if handle_exit:
-            signal.signal(signal.SIGQUIT, handle_exit)
+        signal.signal(signal.SIGQUIT, handle_exit)
 
         # Loop to accept multiple snippets from the user
+        marked_for_reinput = False # Flag to reinput the current snippet
         while True:
             try:
-                content = click.prompt("> ", prompt_suffix="")
+                content = click.prompt(f"{Fore.CYAN}>{Style.RESET_ALL} ", prompt_suffix="")
             except click.Abort:
                 handle_exit(None, None)
             if not content.strip():
                 continue
-            self.add_snippet(content, display=True)  # Adding snippet
+
+            # --- Check for special commands ---
+            if content in ["/exit", "/quit", "/q"]:
+                # --- Exit ---
+                handle_exit(None, None)
+            if content.startswith("/delete ") or content.startswith("/d ") or content.startswith("/del "):
+                # --- Delete snippet ---
+                snippet_ord = int(content.split()[1])
+                self.handle_snippet_delete(snippet_ord=snippet_ord, db=db)
+                # Reinput the current snippet and exit the current loop
+                marked_for_reinput = True
+                break
+            self.add_snippet(content, display=True, db=db)
+
+        if marked_for_reinput:
+            clear_terminal()
+            self.display(footer=False)
+            self.input()
 
     # --- CRUD Operations ---
 
@@ -228,6 +238,22 @@ class Note(BaseModel):
             db.commit()
         self.active = False
 
+    def handle_snippet_delete(self, snippet_ord: int, db: Session = None) -> None:
+        """Deletes a snippet from a note."""
+        db = db or get_session()
+        if snippet_ord < 1 or snippet_ord > len(self.snippets):
+            print(f"{Fore.RED}Snippet with ord={snippet_ord} not found.")
+            return
+        snippet = self.snippets[snippet_ord-1]
+        snippet_db = db.query(SnippetDB).filter_by(id=snippet.id).first()
+        if not snippet_db:
+            print(f"{Fore.RED}Snippet with ID={snippet.id} not found.")
+            return
+        db.delete(snippet_db)
+        db.commit()
+        self.snippets.pop(snippet_ord-1)
+        print(f"{Fore.CYAN}✅ Snippet {snippet_ord} deleted from current note{Style.RESET_ALL}")
+
     @classmethod
     def fromDBobject(cls, note: NoteDB) -> 'Note':
         """ Create a note from a DB object """
@@ -261,7 +287,8 @@ class Note(BaseModel):
         db = db or get_session()
         note = db.query(NoteDB).filter_by(id=id).first()
         if not note:
-            raise ValueError(f"Note with ID={id} not found.")
+            print(f"{Fore.RED}Note with ID {id} not found.")
+            return None
         return Note.fromDBobject(note)
 
     @staticmethod
@@ -279,7 +306,7 @@ class Note(BaseModel):
             raise ValueError(f"Note with ID={self.id} not found.")
         
         if confirm:
-            confirmation = input(f"Are you sure you want to delete note ID={self.id}? (y/n): ")
+            confirmation = input(fwarn("Are you sure you want to delete note ID")+str(self.id)+fwarn("? (y/n): "))
             if confirmation.lower() not in ["y", "yes"]:
                 return None
 
@@ -305,7 +332,7 @@ class Note(BaseModel):
         
         """ Confirm deletion of notes """
         if confirm:
-            confirmation = input(f"Are you sure you want to delete {len(notes)} note(s)? (y/n): ")
+            confirmation = input(fwarn(f"Are you sure you want to delete {len(notes)} note(s)? (y/n): "))
             if confirmation.lower() not in ["y", "yes"]:
                 return None
 
@@ -350,6 +377,7 @@ class Note(BaseModel):
                 clear_terminal_line()
             self.tags.update(tags)
             self.persist(db=db)
+            print(f"{Fore.CYAN}✅ Tags {tags} added to current note{Style.RESET_ALL}")
             return None
 
         # Create snippet object

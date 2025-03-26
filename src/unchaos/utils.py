@@ -2,6 +2,8 @@ from datetime import datetime
 import re
 from typing import Tuple
 
+from colorama import Fore, Style
+
 # Regex for extracting tags (#tag) and keywords (@keyword)
 TAG_PATTERN = r"#([\w-]+|\"[^\"]+\")"
 KEYWORD_PATTERN = r"@([\w-]+|\"[^\"]+\")"
@@ -26,6 +28,21 @@ def flatten(lst):
 def now_formatted():
     return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
+def fsys(content: str):
+    """ Format string for system output. """
+    return f"{Fore.CYAN}{content}{Style.RESET_ALL}"
+
+def fwarn(content: str):
+    """ Format string for warning output. """
+    return f"{Fore.YELLOW}{content}{Style.RESET_ALL}"
+
+def ferror(content: str):
+    """ Format string for error output. """
+    return f"{Fore.RED}{content}{Style.RESET_ALL}"
+
 def clear_terminal_line():
     print("\033[A                             \033[A")
+
+def clear_terminal():
+    print("\033c")
 # 🚫

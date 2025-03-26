@@ -8,16 +8,11 @@ from typing import List, Union
 import toml
 import click
 from colorama import Fore, Style, init
-from sqlalchemy.orm import Session
 
-from unchaos.db import get_session
-from unchaos.types import QueueStatus
-
-# from unchaos.ai import assign_metadata_to_text, handle_queue_task
-from .utils import flatten
+from .db import get_session
+from .types import QueueStatus
+from .utils import clear_terminal, ferror, fsys
 from .models import Note, clear_queue
-# from .db import QueueStatus, QueueTask, get_db
-# from .config import config
 
 @click.group()
 def cli():
@@ -95,9 +90,18 @@ def create(title: str):
     # Persist the note to the database
     note.persist()
 
-    click.echo(f"Note created with ID: {note.id} and title: {note.title}")
+    clear_terminal()
+    print(f"{Fore.CYAN}Note created with ID:{Style.RESET_ALL} {note.id} {Fore.CYAN}and title:{Style.RESET_ALL} {note.title}")
+    print(f"{Fore.CYAN}Enter snippets one by one. (Ctrl+D to save note, Ctrl+C to discard note):{Style.RESET_ALL}")
 
-    note.input(handle_interrupt=True, handle_exit=True)
+    def handle_interrupt(sig, frame):
+        print(ferror("\nCancelling and deleting note..."))
+        note.delete(confirm=False)  # Deleting the note on Ctrl+C
+        sys.exit(0)
+    
+    signal.signal(signal.SIGINT, handle_interrupt)
+
+    note.input()
 
 # --- Command to Delete a Note ---
 @click.command()
@@ -121,7 +125,7 @@ def delete(identifier: Union[str,int]):
     elif len_notes_deleted == 0:
         click.echo(f"No note found with {'id' if id else 'title'} '{identifier}'.")
     else:
-        click.echo(f"{len_notes_deleted} note(s) with {'id' if id else 'title'} '{identifier}' has been deleted.")
+        click.echo(ferror(f"{len_notes_deleted} note(s) with {'id' if id else 'title'} ")+str(identifier)+ferror(" has been deleted."))
 
 # --- Command to Show Note ---
 @click.command()
@@ -136,6 +140,7 @@ def show(note_id: int, width: int):
         click.echo(f"{Fore.RED}Note with ID {note_id} not found.")
         return
     
+    clear_terminal()
     note.display(width=width, footer=True)
 
 # --- Command to Edit Note ---
@@ -148,12 +153,14 @@ def edit(note_id: int, width: int):
     note = Note.get(note_id)
 
     if not note:
-        click.echo(f"{Fore.RED}Note with ID {note_id} not found.")
         return
+    
+    clear_terminal()
+    print("Enter snippets one by one. (Ctrl+D to save note, Ctrl+C to discard note):")
     
     note.display(width=width, footer=False)
 
-    note.input(handle_interrupt=False, handle_exit=True)
+    note.input()
 
 # --- Command to List Notes ---
 @click.command()

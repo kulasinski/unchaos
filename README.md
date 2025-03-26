@@ -65,6 +65,7 @@ unchaos/
 
 # TODO
 * supabase storage
+* handle updated_at
 * tabela do urli i quotesów i pytań (2 ostatnie moze tylko przez tagi?)- regex 
 * chat - oparty na SQL searchu + semantic search
 * smarter search

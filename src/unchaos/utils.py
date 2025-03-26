@@ -41,7 +41,7 @@ def ferror(content: str):
     return f"{Fore.RED}{content}{Style.RESET_ALL}"
 
 def clear_terminal_line():
-    print("\033[A                             \033[A")
+    print("\n\033[A                             \033[A")
 
 def clear_terminal():
     print("\033c")

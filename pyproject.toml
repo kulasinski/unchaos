@@ -10,7 +10,8 @@ requires-python = ">=3.11"
 dependencies = [
     "colorama (>=0.4.6,<0.5.0)",
     "alembic (>=1.15.1,<2.0.0)",
-    "ollama (>=0.4.7,<0.5.0)"
+    "ollama (>=0.4.7,<0.5.0)",
+    "prompt-toolkit (>=3.0.50,<4.0.0)"
 ]
 
 [tool.poetry]

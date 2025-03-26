@@ -5,7 +5,9 @@ from typing import List, Optional, Sequence, Set
 from datetime import datetime
 
 import click
+import readline
 from colorama import Fore, Style
+from prompt_toolkit import prompt
 from pydantic import BaseModel
 from sqlalchemy import Enum
 from sqlalchemy.orm import Session
@@ -25,15 +27,25 @@ class Snippet(BaseModel):
     def persist(self, note_id: int, db: Session = None) -> None:
         """Creates a new snippet in DB."""
         db = db or get_session()
-        new_snippet = SnippetDB(note_id=note_id, content=self.content)
-        db.add(new_snippet)
-        db.commit()
-        db.refresh(new_snippet)
+        if not self.id:
+            new_snippet = SnippetDB(note_id=note_id, content=self.content)
+            db.add(new_snippet)
+            db.commit()
+            db.refresh(new_snippet)
 
-        # update the snippet with the new ID and timestamps
-        self.id = new_snippet.id
-        self.created_at = new_snippet.created_at
-        self.updated_at = new_snippet.updated_at
+            # update the snippet with the new ID and timestamps
+            self.id = new_snippet.id
+            self.created_at = new_snippet.created_at
+            self.updated_at = new_snippet.updated_at
+        else:
+            existing_snippet = db.query(SnippetDB).filter_by(id=self.id).first()
+            if not existing_snippet:
+                raise ValueError(f"Snippet with ID={self.id} not found.")
+            existing_snippet.content = self.content
+            existing_snippet.updated_at = datetime.now()
+            db.commit()
+            db.refresh(existing_snippet)
+            self.updated_at = existing_snippet.updated_at
 
         # Insert tags
         for tag in self.tags:
@@ -163,6 +175,18 @@ class Note(BaseModel):
                 snippet_ord = int(content.split()[1])
                 self.handle_snippet_delete(snippet_ord=snippet_ord, db=db)
                 # Reinput the current snippet and exit the current loop
+                marked_for_reinput = True
+                break
+            if content.startswith("/archive"):
+                self.archive(db=db)
+                break
+            if content.startswith("/edit") or content.startswith("/e"):
+                # --- Edit snippet ---
+                snippet_ord = int(content.split()[1])
+                snippet = self.snippets[snippet_ord-1]
+                # Use `prompt` with a default value
+                snippet.content = prompt(f"[{snippet_ord}] (edit): ", default=snippet.content)
+                snippet.persist(note_id=self.id, db=db)
                 marked_for_reinput = True
                 break
             self.add_snippet(content, display=True, db=db)

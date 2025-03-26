@@ -181,19 +181,6 @@ def list(filters: List[str]):
 
     click.echo("-" * 100)
     for note in notes:
-        # note-level tokens
-        # note_tags = set(tag.tag.value for tag in note.tags)
-        # note_keywords = set(kw.keyword.value for kw in note.keywords)
-
-        # snippet-level tokens
-        # snippet_tags = set(flatten([tag.tag.value for tag in snippet.tags] for snippet in note.snippets))
-        # snippet_keywords = set(flatten([kw.keyword.value for kw in snippet.keywords] for snippet in note.snippets))
-
-        # unioned tokens
-        # tags = note_tags.union(snippet_tags)
-        # keywords = note_keywords.union(snippet_keywords)
-
-
         click.echo(f"{Fore.CYAN}ID:{Style.RESET_ALL} [{note.id}] | "\
                    f"{Fore.CYAN}Title:{Style.RESET_ALL} {note.title} | "\
                    f"{Fore.CYAN}Snippets:{Style.RESET_ALL} {len(note.snippets)} | "\
@@ -202,16 +189,6 @@ def list(filters: List[str]):
                    f"{Fore.CYAN}Keywords:{Style.RESET_ALL} {Fore.MAGENTA}{', '.join(['@'+kw for kw in note.keywordsAll])}{Style.RESET_ALL}"
         )
         click.echo("-" * 100)
-
-# --- Command to Link Notes ---
-@click.command()
-@click.argument("from_note", type=int)
-@click.argument("to_note", type=int)
-@click.argument("relation", type=str)
-def link(from_note: int, to_note: int, relation: str):
-    """Links two notes together by creating a relationship (edge)."""
-    link_notes(from_note, to_note, relation, db=get_session())
-    click.echo(f"Notes {from_note} and {to_note} linked with relation: {relation}")
 
 # --- Command to List Tasks in the Queue ---
 @click.group()
@@ -300,14 +277,6 @@ def magick():
         handle_queue_task(task, note, db=db)
     click.echo("🔮 Magick complete! ✅")
 
-# --- Tests ---
-
-@click.command()
-def test():
-    """Test command for debugging. https://ollama.com/blog/structured-outputs """
-    output = assign_metadata_to_text("I told @Mike to meet me the next day at 10 am in starbucks. #todo \n\nI also need to buy some groceries.\n what is NLP??")
-    print(output)
-
 # ----------------------------
 # --- Registering commands ---
 # ----------------------------
@@ -318,11 +287,9 @@ cli.add_command(delete)
 cli.add_command(show)
 cli.add_command(edit)
 cli.add_command(list)
-cli.add_command(link)
 cli.add_command(queue)
 cli.add_command(magick)
 cli.add_command(delete_db)
-cli.add_command(test)
 
 if __name__ == "__main__":
     cli()  # Run the CLI application

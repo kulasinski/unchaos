@@ -149,15 +149,14 @@ def delete(identifier: Union[str,int]):
     else:
         click.echo(f"{len_notes_deleted} note(s) with {'id' if id else 'title'} '{identifier}' has been deleted.")
 
-# --- Command to Show Notes ---
+# --- Command to Show Note ---
 @click.command()
 @click.argument("note_id", type=int)
 @click.option("--width", type=int, default=50, help="Set the width for displaying the note")
 def show(note_id: int, width: int):
     """Displays a note by ID."""
-    from .models import get_note_by_id
 
-    note = get_note_by_id(note_id, db=None)
+    note: Note = Note.get(note_id)
 
     if not note:
         click.echo(f"{Fore.RED}Note with ID {note_id} not found.")
@@ -168,23 +167,19 @@ def show(note_id: int, width: int):
     click.echo(f"{Fore.CYAN}Created at: {note.created_at.isoformat()}{Style.RESET_ALL}")
     click.echo("-" * width)
 
-    tags, keywords = set(), set()
     for snippet in note.snippets:
         snippet_content = snippet.content
         # Highlight tags and keywords
         for tag in snippet.tags:
-            snippet_content = snippet_content.replace(f"#{tag.tag}", f"{Fore.GREEN}#{tag.tag}{Style.RESET_ALL}")
+            snippet_content = snippet_content.replace(f"#{tag}", f"{Fore.GREEN}#{tag}{Style.RESET_ALL}")
         for keyword in snippet.keywords:
-            snippet_content = snippet_content.replace(f"@{keyword.keyword}", f"{Fore.MAGENTA}@{keyword.keyword}{Style.RESET_ALL}")
+            snippet_content = snippet_content.replace(f"@{keyword}", f"{Fore.MAGENTA}@{keyword}{Style.RESET_ALL}")
         # Display snippet
         click.echo(f"{Fore.CYAN}[{snippet.id}]{Style.RESET_ALL} {snippet_content}")
-        # Display tags and keywords
-        tags.update(tag.tag for tag in snippet.tags)
-        keywords.update(keyword.keyword for keyword in snippet.keywords)
         
     click.echo("-" * width)
-    click.echo(f"{Fore.CYAN}Keywords: {Fore.GREEN}{', '.join(['#'+kw for kw in keywords])}{Style.RESET_ALL}")
-    click.echo(f"{Fore.CYAN}Tags: {Fore.MAGENTA}{', '.join(['@'+tag for tag in tags])}{Style.RESET_ALL}")
+    click.echo(f"{Fore.CYAN}Keywords: {Fore.MAGENTA}{', '.join(['@'+kw for kw in note.keywordsAll])}{Style.RESET_ALL}")
+    click.echo(f"{Fore.CYAN}Tags: {Fore.GREEN}{', '.join(['#'+tag for tag in note.tagsAll])}{Style.RESET_ALL}")
     click.echo("=" * width + "\n")
 
 # --- Command to List Notes ---

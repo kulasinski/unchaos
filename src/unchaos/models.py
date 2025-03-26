@@ -1,3 +1,4 @@
+import json
 from typing import List, Optional, Sequence, Set
 from datetime import datetime
 
@@ -6,7 +7,7 @@ from sqlalchemy import Enum
 from sqlalchemy.orm import Session
 
 from .types import NoteMetadata, QueueTask
-from .db import NoteEntityDB, NoteKeywordDB, NoteTagDB, get_db, NoteDB, SnippetDB, NoteTagDB, SnippetTagDB, NoteKeywordDB, SnippetKeywordDB, QueueDB, get_or_create_token
+from .db import NoteEntityDB, NoteKeywordDB, NoteTagDB, NoteURLDB, get_db, NoteDB, SnippetDB, NoteTagDB, SnippetTagDB, NoteKeywordDB, SnippetKeywordDB, QueueDB, get_or_create_token
 from .utils import containsTagsOnly, extract_tags_and_keywords, now_formatted
 
 class Snippet(BaseModel):
@@ -14,8 +15,8 @@ class Snippet(BaseModel):
     content: str
     created_at: datetime = None
     updated_at: datetime = None
-    tags: Set[str] = None
-    keywords: Set[str] = None
+    tags: Set[str] = set()
+    keywords: Set[str] = set()
 
     def persist(self, note_id: int, db: Session = None) -> None:
         """Creates a new snippet in DB."""
@@ -50,8 +51,8 @@ class Snippet(BaseModel):
             content=snippet.content,
             created_at=snippet.created_at,
             updated_at=snippet.updated_at,
-            tags={tag.tag for tag in snippet.tags},
-            keywords={keyword.keyword for keyword in snippet.keywords},
+            tags={tag.tag.value for tag in snippet.tags},  # Extract the value from TokenDB
+            keywords={keyword.keyword.value for keyword in snippet.keywords},  # Extract the value from TokenDB
         )
     
     @staticmethod
@@ -69,14 +70,14 @@ class Note(BaseModel):
     title: str|None
     created_at: datetime = None
     updated_at: datetime = None
-    custom_fields: dict|None = None
+    custom_fields: dict|None = {}
     embedding: Sequence[float]|None = None
     active: bool = True
     snippets: List[Snippet] = []
-    entities: Set[str] = None
-    urls: Set[str] = None
-    tags: Set[str] = None     # own not snippets'
-    keywords: Set[str] = None # own not snippets'
+    entities: Set[str] = set()
+    urls: Set[str] = set()
+    tags: Set[str] = set()     # own not snippets'
+    keywords: Set[str] = set() # own not snippets'
 
     __token_fields = ["tags", "keywords", "entities", "urls"]
 
@@ -98,41 +99,78 @@ class Note(BaseModel):
             keywords.update(snippet.keywords)
         return list(keywords)
     
-    def addToken(self, tokenType: str, tokenCalue: str):
-        """ Set a token field in the note """
-        if tokenType not in self.__token_fields:
-            raise ValueError(f"Invalid token type: {tokenType}")
-        tokens: Set = getattr(self, tokenType)
-        tokens.add(tokenCalue)
-        setattr(self, tokenType, tokens)
+    # def addToken(self, tokenType: str, tokenValue: str):
+    #     """ Set a token field in the note """
+    #     if tokenType not in self.__token_fields:
+    #         raise ValueError(f"Invalid token type: {tokenType}")
+    #     tokens: Set = getattr(self, tokenType)
+    #     tokens.add(tokenValue)
+    #     setattr(self, tokenType, tokens)
 
-    def removeToken(self, tokenType: str, tokenCalue: str):
-        """ Remove a token field in the note """
-        if tokenType not in self.__token_fields:
-            raise ValueError(f"Invalid token type: {tokenType}")
-        tokens: Set = getattr(self, tokenType)
-        tokens.remove(tokenCalue)
-        setattr(self, tokenType, tokens)
+    # def removeToken(self, tokenType: str, tokenCalue: str):
+    #     """ Remove a token field in the note """
+    #     if tokenType not in self.__token_fields:
+    #         raise ValueError(f"Invalid token type: {tokenType}")
+    #     tokens: Set = getattr(self, tokenType)
+    #     tokens.remove(tokenCalue)
+    #     setattr(self, tokenType, tokens)
 
     # --- CRUD Operations ---
 
     def persist(self, db: Session = None) -> None:
-        """ Creates a new note in DB """
+        """Creates or updates a note in DB."""
         db = db or next(get_db())
 
         if not self.title:
             self.title = f"untitled ({now_formatted()})"
 
-        new_note = NoteDB(title=self.title) 
+        if not self.id: # Create new note
+            note = NoteDB(
+                title=self.title,
+                custom_fields=json.dumps(self.custom_fields),
+            )
+            db.add(note)
+            db.commit()
+            db.refresh(note)
+            self.id = note.id
+            self.created_at = note.created_at
+            self.updated_at = note.updated_at
+            return
+        
+        # Update existing note
+        note = db.query(NoteDB).filter_by(id=self.id).first()
+        if not note:
+            raise ValueError(f"Note with ID={self.id} not found.")
+        note.title = self.title
+        note.custom_fields = json.dumps(self.custom_fields)
+        note.embedding = self.embedding
+        note.active = self.active
+        note.updated_at = datetime.now()
 
-        db.add(new_note)
+        note.tags = [
+            NoteTagDB(tag=get_or_create_token(tag, db=db), note_id=note.id)
+            for tag in self.tags
+        ]
+        note.keywords = [
+            NoteKeywordDB(keyword=get_or_create_token(kw, db=db), note_id=note.id)
+            for kw in self.keywords
+        ]
+        note.entities = [
+            NoteEntityDB(entity=get_or_create_token(entity, db=db), note_id=note.id)
+            for entity in self.entities
+        ]
+        note.urls = [
+            NoteURLDB(url=get_or_create_token(url, db=db), note_id=note.id)
+            for url in self.urls
+        ]
+
         db.commit()
-        db.refresh(new_note)
+        db.refresh(note)
 
-        # get ID
-        self.id = new_note.id
+        self.created_at = note.created_at
+        self.updated_at = note.updated_at
 
-        return new_note
+        return
     
     def archive(self, db: Session = None) -> None:
         """ Archives note (soft delete)."""
@@ -151,20 +189,23 @@ class Note(BaseModel):
             title=note.title,
             created_at=note.created_at,
             updated_at=note.updated_at,
-            custom_fields=note.custom_fields, # TODO parse dict
+            custom_fields=eval(note.custom_fields),
             embedding=note.embedding,
             active=note.active,
-            snippets=[Snippet(
-                id=snippet.id,
-                content=snippet.content,
-                created_at=snippet.created_at,
-                tags={tag.tag for tag in snippet.tags},
-                keywords={keyword.keyword for keyword in snippet.keywords},
-            ) for snippet in note.snippets],
-            entities={entity.entity for entity in note.entities},
-            urls={url.url for url in note.urls},
-            tags={tag.tag for tag in note.tags},
-            keywords={keyword.keyword for keyword in note.keywords},
+            snippets=[
+                Snippet(
+                    id=snippet.id,
+                    content=snippet.content,
+                    created_at=snippet.created_at,
+                    updated_at=snippet.updated_at,
+                    tags={tag.tag.value for tag in snippet.tags},
+                    keywords={keyword.keyword.value for keyword in snippet.keywords},
+                ) for snippet in note.snippets
+            ],
+            entities={entity.entity.value for entity in note.entities},
+            urls={url.url.value for url in note.urls},
+            tags={tag.tag.value for tag in note.tags},
+            keywords={keyword.keyword.value for keyword in note.keywords},
         )
 
     @staticmethod
@@ -258,8 +299,7 @@ class Note(BaseModel):
 
         # check if snippet is composed of tags only. If so, do not add a snippet, instead add tags to note
         if containsTagsOnly(content):
-            for tag in tags:
-                self.addToken("tags", tag)
+            self.tags.update(tags)
             self.persist(db=db)
             return None
 

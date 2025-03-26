@@ -1,11 +1,12 @@
 from datetime import datetime
 import re
+from typing import Tuple
 
 # Regex for extracting tags (#tag) and keywords (@keyword)
 TAG_PATTERN = r"#([\w-]+|\"[^\"]+\")"
 KEYWORD_PATTERN = r"@([\w-]+|\"[^\"]+\")"
 
-def extract_tags_and_keywords(text: str):
+def extract_tags_and_keywords(text: str) -> Tuple[set, set]:
     """Extracts tags and keywords from text."""
     tags = re.findall(TAG_PATTERN, text)
     keywords = re.findall(KEYWORD_PATTERN, text)

@@ -26,4 +26,6 @@ def flatten(lst):
 def now_formatted():
     return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
+def clear_terminal_line():
+    print("\033[A                             \033[A")
 # 🚫

@@ -174,9 +174,13 @@ def init_db():
 
 # -- Helper Functions
 
+def get_session() -> Session:
+    """Returns an active session for database interaction."""
+    return next(get_db())
+
 def get_or_create_token(value: str, db: Session = None) -> TokenDB:
     """Retrieves or creates a token by value."""
-    db = db or next(get_db())
+    db = db or get_session()
     token = db.query(TokenDB).filter_by(value=value).first()
     if not token:
         token = TokenDB(value=value)

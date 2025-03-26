@@ -1,14 +1,18 @@
 import json
+import signal
+import sys
 from typing import List, Optional, Sequence, Set
 from datetime import datetime
 
+import click
+from colorama import Fore, Style
 from pydantic import BaseModel
 from sqlalchemy import Enum
 from sqlalchemy.orm import Session
 
 from .types import NoteMetadata, QueueTask
-from .db import NoteEntityDB, NoteKeywordDB, NoteTagDB, NoteURLDB, get_db, NoteDB, SnippetDB, NoteTagDB, SnippetTagDB, NoteKeywordDB, SnippetKeywordDB, QueueDB, get_or_create_token
-from .utils import containsTagsOnly, extract_tags_and_keywords, now_formatted
+from .db import NoteEntityDB, NoteKeywordDB, NoteTagDB, NoteURLDB, get_session, NoteDB, SnippetDB, NoteTagDB, SnippetTagDB, NoteKeywordDB, SnippetKeywordDB, QueueDB, get_or_create_token
+from .utils import clear_terminal_line, containsTagsOnly, extract_tags_and_keywords, now_formatted
 
 class Snippet(BaseModel):
     id: int = None
@@ -20,7 +24,7 @@ class Snippet(BaseModel):
 
     def persist(self, note_id: int, db: Session = None) -> None:
         """Creates a new snippet in DB."""
-        db = db or next(get_db())
+        db = db or get_session()
         new_snippet = SnippetDB(note_id=note_id, content=self.content)
         db.add(new_snippet)
         db.commit()
@@ -43,6 +47,16 @@ class Snippet(BaseModel):
 
         db.commit()
 
+    def display(self, ord: int=None):
+        snippet_content = self.content
+        # Highlight tags and keywords
+        for tag in self.tags:
+            snippet_content = snippet_content.replace(f"#{tag}", f"{Fore.GREEN}#{tag}{Style.RESET_ALL}")
+        for keyword in self.keywords:
+            snippet_content = snippet_content.replace(f"@{keyword}", f"{Fore.MAGENTA}@{keyword}{Style.RESET_ALL}")
+        # Display snippet
+        print(f"{Fore.CYAN}[{ord}]{Style.RESET_ALL} {snippet_content}")
+
     @classmethod
     def fromDBobject(cls, snippet: SnippetDB) -> 'Snippet':
         """Create a snippet from a DB object."""
@@ -58,7 +72,7 @@ class Snippet(BaseModel):
     @staticmethod
     def get(id: int, db: Session = None) -> 'Snippet':
         """Retrieves a snippet by ID."""
-        db = db or next(get_db())
+        db = db or get_session()
         snippet = db.query(SnippetDB).filter_by(id=id).first()
         if not snippet:
             raise ValueError(f"Snippet with ID={id} not found.")
@@ -99,27 +113,60 @@ class Note(BaseModel):
             keywords.update(snippet.keywords)
         return list(keywords)
     
-    # def addToken(self, tokenType: str, tokenValue: str):
-    #     """ Set a token field in the note """
-    #     if tokenType not in self.__token_fields:
-    #         raise ValueError(f"Invalid token type: {tokenType}")
-    #     tokens: Set = getattr(self, tokenType)
-    #     tokens.add(tokenValue)
-    #     setattr(self, tokenType, tokens)
+    def display(self, width: int = 80, footer: bool = True):
+        """Displays the note in a formatted way."""
+        print("\n"+"=" * width)
+        print(f"{Fore.CYAN}Note title:{Style.RESET_ALL} {self.title}")
+        print(f"{Fore.CYAN}Created at: {self.created_at.isoformat()}{Style.RESET_ALL}")
+        print("-" * width)
 
-    # def removeToken(self, tokenType: str, tokenCalue: str):
-    #     """ Remove a token field in the note """
-    #     if tokenType not in self.__token_fields:
-    #         raise ValueError(f"Invalid token type: {tokenType}")
-    #     tokens: Set = getattr(self, tokenType)
-    #     tokens.remove(tokenCalue)
-    #     setattr(self, tokenType, tokens)
+        for i,snippet in enumerate(self.snippets):
+            snippet.display(ord=i+1)
+            
+        if footer:
+            print("-" * width)
+            print(f"{Fore.CYAN}Keywords: {Fore.MAGENTA}{', '.join(['@'+kw for kw in self.keywordsAll])}{Style.RESET_ALL}")
+            print(f"{Fore.CYAN}Tags: {Fore.GREEN}{', '.join(['#'+tag for tag in self.tagsAll])}{Style.RESET_ALL}")
+            print("=" * width + "\n")
+
+    # --- Input ---
+
+    def input(self, handle_interrupt=True, handle_exit=True):
+        """Interactive input for note creation or update."""
+        
+        print("Enter snippets one by one. (Ctrl+D to save note, Ctrl+C to discard note):")
+
+        def handle_interrupt(sig, frame):
+            print("\nCancelling and deleting note...")
+            self.delete(confirm=False)  # Deleting the note on Ctrl+C
+            sys.exit(0)
+
+        def handle_exit(sig, frame):
+            print("\nFinishing and saving note...")
+            self.to_queue()
+            print(f"Note {self.id} added to the queue.")
+            sys.exit(0)
+
+        if handle_interrupt:
+            signal.signal(signal.SIGINT, handle_interrupt)
+        if handle_exit:
+            signal.signal(signal.SIGQUIT, handle_exit)
+
+        # Loop to accept multiple snippets from the user
+        while True:
+            try:
+                content = click.prompt("> ", prompt_suffix="")
+            except click.Abort:
+                handle_exit(None, None)
+            if not content.strip():
+                continue
+            self.add_snippet(content, display=True)  # Adding snippet
 
     # --- CRUD Operations ---
 
     def persist(self, db: Session = None) -> None:
         """Creates or updates a note in DB."""
-        db = db or next(get_db())
+        db = db or get_session()
 
         if not self.title:
             self.title = f"untitled ({now_formatted()})"
@@ -174,7 +221,7 @@ class Note(BaseModel):
     
     def archive(self, db: Session = None) -> None:
         """ Archives note (soft delete)."""
-        db = db or next(get_db())
+        db = db or get_session()
         note = db.query(NoteDB).filter_by(id=self.id).first()
         if note:
             note.active = False
@@ -211,7 +258,7 @@ class Note(BaseModel):
     @staticmethod
     def get(id: int, db: Session = None) -> 'Note':
         """ Retrieves a note by ID """
-        db = db or next(get_db())
+        db = db or get_session()
         note = db.query(NoteDB).filter_by(id=id).first()
         if not note:
             raise ValueError(f"Note with ID={id} not found.")
@@ -220,13 +267,13 @@ class Note(BaseModel):
     @staticmethod
     def getAll(db: Session = None) -> List['Note']:
         """Retrieves all active notes from the DB."""
-        db = db or next(get_db())
+        db = db or get_session()
         note_dbs = db.query(NoteDB).filter(NoteDB.active == True).all()
         return [Note.fromDBobject(note) for note in note_dbs]
 
     def delete(self, confirm: bool = True, db: Session = None) -> None:
         """Permanently deletes a note."""
-        db = db or next(get_db())
+        db = db or get_session()
         note = db.query(NoteDB).filter(NoteDB.id == self.id).first()
         if not note:
             raise ValueError(f"Note with ID={self.id} not found.")
@@ -242,7 +289,7 @@ class Note(BaseModel):
     @staticmethod
     def deleteAll(id: int, title: str = None, confirm: bool = True, db: Session = None) -> int:
         """ Permanently deletes multiple notes."""
-        db = db or next(get_db())
+        db = db or get_session()
         if id:
             notes = db.query(NoteDB).filter(NoteDB.id == id).all()
         elif title:
@@ -270,7 +317,7 @@ class Note(BaseModel):
     @staticmethod
     def search(filters: List[str], db: Session = None) -> List['Note']:
         """Search for notes based on tag, keyword, or content filters."""
-        db = db or next(get_db())
+        db = db or get_session()
 
         if filters:
             raise NotImplementedError("Filtering notes is not yet implemented?")
@@ -288,17 +335,19 @@ class Note(BaseModel):
         notes_db = query.distinct().all()
         return [Note.fromDBobject(note) for note in notes_db]
     
-    # --- Snippets Handling ---
+    # --- Snippets Handling ---)
 
-    def add_snippet(self, content: str, db: Session = None) -> SnippetDB:
+    def add_snippet(self, content: str, display: bool=False, db: Session = None) -> SnippetDB:
         """Adds a snippet to a note and DB and extracts tags/keywords."""
-        db = db or next(get_db())
+        db = db or get_session()
 
         # Extract tags and keywords
         tags, keywords = extract_tags_and_keywords(content)
 
         # check if snippet is composed of tags only. If so, do not add a snippet, instead add tags to note
         if containsTagsOnly(content):
+            if display:
+                clear_terminal_line()
             self.tags.update(tags)
             self.persist(db=db)
             return None
@@ -309,6 +358,10 @@ class Note(BaseModel):
             tags=tags,
             keywords=keywords,
         )
+
+        if display:
+            clear_terminal_line()
+            snippet.display(ord=len(self.snippets)+1)
 
         # Persist snippet
         new_snippet = snippet.persist(note_id=self.id, db=db)
@@ -322,13 +375,19 @@ class Note(BaseModel):
 
     def to_queue(self, db: Session = None):
         """Adds a newly created note to the queue for further processing."""
-        db = db or next(get_db())
+        db = db or get_session()
+
+        # first check if note is already in the queue
+        queue_entry = db.query(QueueDB).filter_by(note_id=self.id).all()
+        existing_tasks = [entry.task for entry in queue_entry]
 
         for task in [
             QueueTask.ASSIGN_METADATA,
             QueueTask.SUGGEST_NODES,
             QueueTask.EMBED,
         ]:
+            if task in existing_tasks:
+                continue
             queue_entry = QueueDB(
                 note_id=self.id, 
                 task=task,
@@ -337,23 +396,11 @@ class Note(BaseModel):
 
         db.commit()
 
-
-
-
-
-
-
-
-
-
-
-
-
-
+# --- other functions ---
 
 def update_note_metadata(note: NoteDB, metadata: NoteMetadata, db: Session = None):
     """Updates the metadata of a note."""
-    db = db or next(get_db())
+    db = db or get_session()
 
     # Clear existing relationships to avoid duplicates
     note.tags.clear()
@@ -374,11 +421,13 @@ def update_note_metadata(note: NoteDB, metadata: NoteMetadata, db: Session = Non
 
 # QUEUE OPERATIONS
 
-def list_queue(db: Session) -> List[QueueDB]:
+def list_queue(db: Session = None) -> List[QueueDB]:
     """Lists all tasks in the queue."""
+    db = db or get_session()
     return db.query(QueueDB).all()
 
-def clear_queue(db: Session):
+def clear_queue(db: Session = None):
     """Clears all tasks in the queue."""
+    db = db or get_session()
     db.query(QueueDB).delete()
     db.commit()

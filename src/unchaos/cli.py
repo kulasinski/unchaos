@@ -10,9 +10,12 @@ import click
 from colorama import Fore, Style, init
 from sqlalchemy.orm import Session
 
+from unchaos.db import get_session
+from unchaos.types import QueueStatus
+
 # from unchaos.ai import assign_metadata_to_text, handle_queue_task
 from .utils import flatten
-from .models import Note
+from .models import Note, clear_queue
 # from .db import QueueStatus, QueueTask, get_db
 # from .config import config
 
@@ -20,12 +23,6 @@ from .models import Note
 def cli():
     """Unchaos CLI - A tool for managing your notes with advanced tagging, AI integration, and searching."""
     pass
-
-# Helper function to get the active DB session
-def get_session() -> Session:
-    """Returns an active session for database interaction."""
-    return next(get_db())
-
 
 # ------------------------------------
 # --- Command Line Interface (CLI) ---
@@ -99,31 +96,8 @@ def create(title: str):
     note.persist()
 
     click.echo(f"Note created with ID: {note.id} and title: {note.title}")
-    click.echo("Enter snippets one by one. (Ctrl+D to save note, Ctrl+C to discard note):")
 
-    def handle_interrupt(sig, frame):
-        click.echo("\nCancelling and deleting note...")
-        note.delete(confirm=False)  # Deleting the note on Ctrl+C
-        sys.exit(0)
-
-    def handle_exit(sig, frame):
-        click.echo("\nFinishing and saving note...")
-        note.to_queue()
-        click.echo(f"Note {note.id} added to the queue.")
-        sys.exit(0)
-
-    signal.signal(signal.SIGINT, handle_interrupt)
-    signal.signal(signal.SIGQUIT, handle_exit)
-
-    # Loop to accept multiple snippets from the user
-    while True:
-        try:
-            content = click.prompt("> ", prompt_suffix="")
-        except click.Abort:
-            handle_exit(None, None)
-        if not content.strip():
-            continue
-        note.add_snippet(content)  # Adding snippet
+    note.input(handle_interrupt=True, handle_exit=True)
 
 # --- Command to Delete a Note ---
 @click.command()
@@ -161,26 +135,25 @@ def show(note_id: int, width: int):
     if not note:
         click.echo(f"{Fore.RED}Note with ID {note_id} not found.")
         return
+    
+    note.display(width=width, footer=True)
 
-    click.echo("\n"+"=" * width)
-    click.echo(f"{Fore.CYAN}Note title:{Style.RESET_ALL} {note.title}")
-    click.echo(f"{Fore.CYAN}Created at: {note.created_at.isoformat()}{Style.RESET_ALL}")
-    click.echo("-" * width)
+# --- Command to Edit Note ---
+@click.command()
+@click.argument("note_id", type=int)
+@click.option("--width", type=int, default=50, help="Set the width for displaying the note")
+def edit(note_id: int, width: int):
+    """Edits a note by ID."""
+    
+    note = Note.get(note_id)
 
-    for snippet in note.snippets:
-        snippet_content = snippet.content
-        # Highlight tags and keywords
-        for tag in snippet.tags:
-            snippet_content = snippet_content.replace(f"#{tag}", f"{Fore.GREEN}#{tag}{Style.RESET_ALL}")
-        for keyword in snippet.keywords:
-            snippet_content = snippet_content.replace(f"@{keyword}", f"{Fore.MAGENTA}@{keyword}{Style.RESET_ALL}")
-        # Display snippet
-        click.echo(f"{Fore.CYAN}[{snippet.id}]{Style.RESET_ALL} {snippet_content}")
-        
-    click.echo("-" * width)
-    click.echo(f"{Fore.CYAN}Keywords: {Fore.MAGENTA}{', '.join(['@'+kw for kw in note.keywordsAll])}{Style.RESET_ALL}")
-    click.echo(f"{Fore.CYAN}Tags: {Fore.GREEN}{', '.join(['#'+tag for tag in note.tagsAll])}{Style.RESET_ALL}")
-    click.echo("=" * width + "\n")
+    if not note:
+        click.echo(f"{Fore.RED}Note with ID {note_id} not found.")
+        return
+    
+    note.display(width=width, footer=False)
+
+    note.input(handle_interrupt=False, handle_exit=True)
 
 # --- Command to List Notes ---
 @click.command()
@@ -242,6 +215,8 @@ def queue():
 @queue.command(name="list")
 def queue_list():
     """Lists tasks in the queue."""
+    from .models import list_queue
+
     def color_status(status: str):
         if status == QueueStatus.PENDING:
             return Fore.YELLOW + status + Style.RESET_ALL
@@ -252,7 +227,7 @@ def queue_list():
         elif status == QueueStatus.FAILED:
             return Fore.RED + status + Style.RESET_ALL
 
-    queue_items = list_queue(db=get_session())
+    queue_items = list_queue()
     click.echo(f"{len(queue_items)} tasks in the queue:")
     for item in queue_items:
         click.echo(f"Task ID: {item.id} | Note ID: {item.note_id} | Task {item.task} | Status: {color_status(item.status)} | Created At: {item.created_at}")
@@ -260,14 +235,19 @@ def queue_list():
 @queue.command(name="clear")
 def queue_clear():
     """Clears all tasks in the queue."""
-    clear_queue(db=get_session())
+    clear_queue()
     click.echo("Queue cleared.")
 
 @queue.command(name="add")
 @click.argument("note_id", type=int)
 def queue_add(note_id: int):
     """Adds a note to the queue for further processing."""
-    add_note_to_queue(note_id, db=get_session())
+    db=get_session()
+    note = Note.get(note_id, db=db)
+    if not note:
+        click.echo(f"Note with ID {note_id} not found.")
+        return
+    note.to_queue(db=db)
     click.echo(f"Note {note_id} added to the queue.")
 
 # --- Command to Delete the Database ---
@@ -329,6 +309,7 @@ cli.add_command(init)
 cli.add_command(create)
 cli.add_command(delete)
 cli.add_command(show)
+cli.add_command(edit)
 cli.add_command(list)
 cli.add_command(link)
 cli.add_command(queue)

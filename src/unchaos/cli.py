@@ -258,8 +258,6 @@ def graph():
 def init_graph():
     """Initializes the graph structure using the locations provided in the config"""
 
-   
-
     root_locations = config.get("graph.roots", [])
     root_locations_expanded = []
     for loc in root_locations:
@@ -272,26 +270,22 @@ def init_graph():
             root_locations_expanded.append(node_names)
 
     G = Graph.initDB(root_locations=root_locations_expanded)
-    
-    # G = Graph.fromDB()
-    # for loc in root_locations_expanded:
-    #     G.get_or_create_location(loc)
-    # G.persist()
 
 @graph.command(name="add")
 @click.argument("location", type=str)
 def add_node(location: str):
     """Adds a new node to the graph structure. Use notation 'Node1 > Node2 > Node3'."""
-    last_node_id = get_or_create_location(location)
-    if not last_node_id:
-        click.echo(ferror("Error adding node at location: ")+location)
-    else:
-        click.echo(fsys("Nodes added or location exists: ")+location)
+    db = get_session()
+    new_nodeDB = Graph\
+        .fromDB(db=db)\
+        .get_or_create_location(location=location, db=db)
+    if new_nodeDB:
+        click.echo(f"Node '{location}' added to the graph.")
 
 @graph.command(name="show")
 def show_graph():
     """Displays the graph structure of the notes."""
-    raise NotImplementedError("Graph visualization is not yet implemented.")
+    Graph.fromDB().display_nodes()
 
 # --- Command for Graph Handling ---
 

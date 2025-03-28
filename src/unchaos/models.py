@@ -530,37 +530,6 @@ class Graph(BaseModel):
         for edge in edges:
             graph.add_edge(edge.from_node, edge.to_node, edgeDB=edge)
         return cls(nx=graph)
-    
-    def upsert_location(self, location: Union[str, List[str]], db: Session = None) -> None:
-        """Upserts a location in the graph."""
-        db = db or get_session()
-        if isinstance(location, str):
-            location: List[str] = split_location_to_nodes(location)
-
-        # always start from root
-        if not self.nx.nodes[self.ROOT]:
-            self.nx.add_node(self.ROOT, note_ids=[])
-
-        # every location implicitly starts from the root, 
-        # so the first node is root's direct child, and so on
-        curr_node = self.nx.nodes[self.ROOT]
-        for node_name in enumerate(location):
-            # check if node_name is in the current node's children.
-            # if not, add it using the name as id (temporarily). look at the "name" attribute of the node
-            if node_name not in self.nx.neighbors(curr_node):
-                # add the node to the db, also the edge
-                new_node = NodeDB(name=node_name)
-                new_edge = EdgeDB(from_node=curr_node, to_node=new_node)
-                # add the edge to the db
-                db.add(new_edge)
-                # add the node to the db
-                db.add(new_node)
-                db.commit()
-                db.refresh(new_node)
-                # add the node to the graph
-                self.nx.add_node(new_node.id, name=new_node.name, note_ids=[])
-                self.nx.add_edge(curr_node, new_node)
-                curr_node = new_node
 
     def get_or_create_location(self, location: Union[str, List[str]], db: Session = None) -> NodeDB:
         """Retrieves or creates the given node location.
@@ -609,3 +578,32 @@ class Graph(BaseModel):
                 curr_node_id = new_node_db.id
 
         return self.nx.nodes[curr_node_id]["nodeDB"]
+    
+    def display_nodes(self):
+        """Prints all graph nodes in tree-like format starting from ROOT."""
+        if self.ROOT not in self.nx:
+            print("🚫 ROOT node not found in the graph.")
+            return
+
+        def dfs(node_id: str, visited: set, prefix: str = "", is_last: bool = True):
+            if node_id in visited:
+                return
+            visited.add(node_id)
+
+            node_data = self.nx.nodes[node_id]
+            name = node_data["nodeDB"].name
+
+            connector = "└── " if is_last else "├── "
+            print(prefix + (connector if prefix else "") + name)
+
+            # Prepare children
+            children = sorted(
+                [n for n in self.nx.neighbors(node_id) if n not in visited],
+                key=lambda n: self.nx.nodes[n]["nodeDB"].name
+            )
+            for i, child_id in enumerate(children):
+                last = (i == len(children) - 1)
+                new_prefix = prefix + ("    " if is_last else "│   ")
+                dfs(child_id, visited, new_prefix, last)
+
+        dfs(self.ROOT, visited=set(), prefix="", is_last=True)

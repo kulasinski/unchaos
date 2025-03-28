@@ -1,20 +1,19 @@
 import json
 import signal
 import sys
-from typing import List, Optional, Sequence, Set
+from typing import Annotated, ClassVar, List, Optional, Sequence, Set, Union
 from datetime import datetime
 
 import click
-import readline
 from colorama import Fore, Style
 from prompt_toolkit import prompt
-from pydantic import BaseModel
-from sqlalchemy import Enum
+import networkx as nx
+from pydantic import BaseModel, ConfigDict
 from sqlalchemy.orm import Session
 
 from .types import NoteMetadata, QueueTask
-from .db import NoteEntityDB, NoteKeywordDB, NoteTagDB, NoteURLDB, get_session, NoteDB, SnippetDB, NoteTagDB, SnippetTagDB, NoteKeywordDB, SnippetKeywordDB, QueueDB, get_or_create_token
-from .utils import clear_terminal, clear_terminal_line, containsTagsOnly, extract_tags_and_keywords, fwarn, now_formatted, fsys
+from .db import EdgeDB, NodeDB, NoteEntityDB, NoteKeywordDB, NoteNodeDB, NoteTagDB, NoteURLDB, get_session, NoteDB, SnippetDB, NoteTagDB, SnippetTagDB, NoteKeywordDB, SnippetKeywordDB, QueueDB, get_or_create_token
+from .utils import clear_terminal, clear_terminal_line, containsTagsOnly, extract_tags_and_keywords, fwarn, now_formatted, fsys, split_location_to_nodes
 
 class Snippet(BaseModel):
     id: int = None
@@ -187,6 +186,12 @@ class Note(BaseModel):
                 # Use `prompt` with a default value
                 snippet.content = prompt(f"[{snippet_ord}] (edit): ", default=snippet.content)
                 snippet.persist(note_id=self.id, db=db)
+                marked_for_reinput = True
+                break
+            if content == "/title":
+                # --- Edit title ---
+                self.title = prompt("Title (edit): ", default=self.title)
+                self.persist(db=db)
                 marked_for_reinput = True
                 break
             self.add_snippet(content, display=True, db=db)
@@ -452,6 +457,7 @@ class Note(BaseModel):
 
 def update_note_metadata(note: NoteDB, metadata: NoteMetadata, db: Session = None):
     """Updates the metadata of a note."""
+    raise NotImplementedError("Update note metadata not implemented")
     db = db or get_session()
 
     # Clear existing relationships to avoid duplicates
@@ -483,3 +489,123 @@ def clear_queue(db: Session = None):
     db = db or get_session()
     db.query(QueueDB).delete()
     db.commit()
+
+# GRAPH OPERATIONS
+
+class Graph(BaseModel):
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+    nx: nx.Graph
+    ROOT: ClassVar[str] = "__ROOT__"
+
+    @classmethod
+    def initDB(cls, root_locations = [], db: Session = None) -> 'Graph':
+        """Initializes the graph in the DB."""
+        db = db or get_session()
+        
+        # create root node if it does not exist
+        root_node = db.query(NodeDB).filter_by(name=cls.ROOT).first()
+        if not root_node:
+            db.add(NodeDB(name=cls.ROOT))
+            db.commit()
+
+        # load Graph from DB in the current state
+        G = cls.fromDB(db=db)
+
+        # add every root location
+        for loc in root_locations:
+            G.get_or_create_location(loc, db=db)
+
+        return G
+
+    @classmethod
+    def fromDB(cls, db: Session = None) -> 'Graph':
+        """Creates a graph from the DB."""
+        db = db or get_session()
+        nodes = db.query(NodeDB).all()
+        edges = db.query(EdgeDB).all()
+        # nodes_notes = db.query(NoteNodeDB).all()
+        graph = nx.Graph()
+        for node in nodes:
+            graph.add_node(cls.ROOT if node.name==Graph.ROOT else node.id, nodeDB=node, note_ids=[note.note_id for note in node.note_links])
+        for edge in edges:
+            graph.add_edge(edge.from_node, edge.to_node, edgeDB=edge)
+        return cls(nx=graph)
+    
+    def upsert_location(self, location: Union[str, List[str]], db: Session = None) -> None:
+        """Upserts a location in the graph."""
+        db = db or get_session()
+        if isinstance(location, str):
+            location: List[str] = split_location_to_nodes(location)
+
+        # always start from root
+        if not self.nx.nodes[self.ROOT]:
+            self.nx.add_node(self.ROOT, note_ids=[])
+
+        # every location implicitly starts from the root, 
+        # so the first node is root's direct child, and so on
+        curr_node = self.nx.nodes[self.ROOT]
+        for node_name in enumerate(location):
+            # check if node_name is in the current node's children.
+            # if not, add it using the name as id (temporarily). look at the "name" attribute of the node
+            if node_name not in self.nx.neighbors(curr_node):
+                # add the node to the db, also the edge
+                new_node = NodeDB(name=node_name)
+                new_edge = EdgeDB(from_node=curr_node, to_node=new_node)
+                # add the edge to the db
+                db.add(new_edge)
+                # add the node to the db
+                db.add(new_node)
+                db.commit()
+                db.refresh(new_node)
+                # add the node to the graph
+                self.nx.add_node(new_node.id, name=new_node.name, note_ids=[])
+                self.nx.add_edge(curr_node, new_node)
+                curr_node = new_node
+
+    def get_or_create_location(self, location: Union[str, List[str]], db: Session = None) -> NodeDB:
+        """Retrieves or creates the given node location.
+           E.g. if location is: "A > B > C", it will create nodes A, B, and C if they do not exist,
+           then link them together as A > B and B > C.
+           Returns the last node object.
+        """
+        db = db or get_session()
+
+        if isinstance(location, str):
+            location: List[str] = split_location_to_nodes(location)
+
+        print(f"{Fore.CYAN}Adding location: {location}{Style.RESET_ALL}")
+
+        # Start from the root node
+        if self.ROOT not in self.nx:
+            raise ValueError("Root node not found in graph. This should not happen.")
+
+        curr_node_id = self.ROOT  # ✅ We assume self.ROOT was added as a node ID
+        for node_name in location:
+            # Check if the node exists as a neighbor with the given name
+            matching_neighbors = [
+                n for n in self.nx.neighbors(curr_node_id)
+                if self.nx.nodes[n]["nodeDB"].name == node_name
+            ]
+
+            if len(matching_neighbors) > 1:
+                raise ValueError(f"Multiple nodes named '{node_name}' found near '{curr_node_id}'")
+            elif matching_neighbors:
+                curr_node_id = matching_neighbors[0]
+            else:
+                # Create new node and edge
+                new_node_db = NodeDB(name=node_name)
+                db.add(new_node_db)
+                db.commit()
+                db.refresh(new_node_db)
+
+                # DB edge
+                db.add(EdgeDB(from_node=curr_node_id, to_node=new_node_db.id))
+                db.commit()
+
+                # Graph update
+                self.nx.add_node(new_node_db.id, nodeDB=new_node_db, note_ids=[])
+                self.nx.add_edge(curr_node_id, new_node_db.id)
+
+                curr_node_id = new_node_db.id
+
+        return self.nx.nodes[curr_node_id]["nodeDB"]

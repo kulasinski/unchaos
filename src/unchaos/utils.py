@@ -1,6 +1,6 @@
 from datetime import datetime
 import re
-from typing import Tuple
+from typing import List, Tuple
 
 from colorama import Fore, Style
 
@@ -21,6 +21,10 @@ def containsTagsOnly(text: str):
         if not token.startswith("#"):
             return False
     return True
+
+def split_location_to_nodes(location: str, split_char: str = ">") -> List[str]:
+    """Split location string to nodes."""
+    return [node.strip() for node in location.split(split_char)]
 
 def flatten(lst):
     return [item for sublist in lst for item in sublist]

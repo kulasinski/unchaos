@@ -40,6 +40,7 @@ class NoteDB(Base):
     keywords = relationship("NoteKeywordDB", back_populates="note", cascade="all, delete-orphan")
     entities = relationship("NoteEntityDB", back_populates="note", cascade="all, delete-orphan")
     urls = relationship("NoteURLDB", back_populates="note", cascade="all, delete-orphan")
+    nodes = relationship("NoteNodeDB", back_populates="note", cascade="all, delete-orphan")
 
 class SnippetDB(Base):
     __tablename__ = "snippets"
@@ -142,13 +143,37 @@ class NoteURLDB(Base):
 #     created_at = Column(DateTime, default=datetime.utcnow)
 #     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
+class NodeDB(Base):
+    __tablename__ = "nodes"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    name = Column(String, unique=True, nullable=False)  # Unique node names
+
+    edges_from = relationship(
+        "EdgeDB", foreign_keys="[EdgeDB.from_node]", back_populates="from_node_rel"
+    )
+    edges_to = relationship(
+        "EdgeDB", foreign_keys="[EdgeDB.to_node]", back_populates="to_node_rel"
+    )
+    note_links = relationship("NoteNodeDB", back_populates="node", cascade="all, delete-orphan")
+
 class EdgeDB(Base):
     __tablename__ = "edges"
 
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    from_note = Column(Integer, ForeignKey("notes.id", ondelete="CASCADE"), nullable=False)
-    to_note = Column(Integer, ForeignKey("notes.id", ondelete="CASCADE"), nullable=False)
-    relation = Column(String, nullable=False)  # e.g., "causes", "relates_to"
+    from_node = Column(Integer, ForeignKey("nodes.id", ondelete="CASCADE"), primary_key=True)
+    to_node = Column(Integer, ForeignKey("nodes.id", ondelete="CASCADE"), primary_key=True)
+
+    from_node_rel = relationship("NodeDB", foreign_keys=[from_node], back_populates="edges_from")
+    to_node_rel = relationship("NodeDB", foreign_keys=[to_node], back_populates="edges_to")
+    
+class NoteNodeDB(Base):
+    __tablename__ = "note_nodes"
+
+    note_id = Column(Integer, ForeignKey("notes.id", ondelete="CASCADE"), primary_key=True)
+    node_id = Column(Integer, ForeignKey("nodes.id", ondelete="CASCADE"), primary_key=True)
+
+    note = relationship("NoteDB", back_populates="nodes")
+    node = relationship("NodeDB", back_populates="note_links")
 
 class QueueDB(Base):
     __tablename__ = 'queue'

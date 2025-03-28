@@ -1,6 +1,4 @@
-import logging
 import os
-from datetime import datetime
 import signal
 import sys
 from typing import List, Union
@@ -9,10 +7,11 @@ import toml
 import click
 from colorama import Fore, Style, init
 
+from .config import config
 from .db import get_session
 from .types import QueueStatus
-from .utils import clear_terminal, ferror, fsys
-from .models import Note, clear_queue
+from .utils import clear_terminal, ferror, fsys, split_location_to_nodes
+from .models import Graph, Note, clear_queue
 
 @click.group()
 def cli():
@@ -250,6 +249,52 @@ def delete_db():
     else:
         click.echo("Database file not found.")
 
+# --- Command for Graph Handling ---
+@click.group()
+def graph():
+    pass
+
+@graph.command(name="init")
+def init_graph():
+    """Initializes the graph structure using the locations provided in the config"""
+
+   
+
+    root_locations = config.get("graph.roots", [])
+    root_locations_expanded = []
+    for loc in root_locations:
+        node_names = split_location_to_nodes(loc)
+        last_node = node_names[-1]
+        if "|" in last_node:
+            for last_node_split in last_node.split("|"):
+                root_locations_expanded.append(node_names[:-1] + [last_node_split.strip()])
+        else:
+            root_locations_expanded.append(node_names)
+
+    G = Graph.initDB(root_locations=root_locations_expanded)
+    
+    # G = Graph.fromDB()
+    # for loc in root_locations_expanded:
+    #     G.get_or_create_location(loc)
+    # G.persist()
+
+@graph.command(name="add")
+@click.argument("location", type=str)
+def add_node(location: str):
+    """Adds a new node to the graph structure. Use notation 'Node1 > Node2 > Node3'."""
+    last_node_id = get_or_create_location(location)
+    if not last_node_id:
+        click.echo(ferror("Error adding node at location: ")+location)
+    else:
+        click.echo(fsys("Nodes added or location exists: ")+location)
+
+@graph.command(name="show")
+def show_graph():
+    """Displays the graph structure of the notes."""
+    raise NotImplementedError("Graph visualization is not yet implemented.")
+
+# --- Command for Graph Handling ---
+
 # --- AI Integration (Dummy) ---
 @click.command()
 @click.argument("note_id", type=int)
@@ -287,6 +332,7 @@ cli.add_command(delete)
 cli.add_command(show)
 cli.add_command(edit)
 cli.add_command(list)
+cli.add_command(graph)
 cli.add_command(queue)
 cli.add_command(magick)
 cli.add_command(delete_db)

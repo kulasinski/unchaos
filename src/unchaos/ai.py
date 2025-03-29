@@ -42,15 +42,14 @@ def assign_metadata_to_text(text: str, model_name = model_reason) -> NoteMetadat
     sys_prompt = f"""
     Your job is to assign metadata to the text provided by the user.
     First, analyze the text and its intent.
-    Then, assign metadata to the text: tags, keywords, and entities.
+    Then, assign metadata to the text: tags and entities.
 
     Examples:
-    - entities are names, dates, locations, addresses, IP addresses, etc.
-    - tags are categories, topics, or themes.
-    - keywords are important words or phrases.
+    - entities are (key) names, dates, locations, addresses, IP addresses, etc.
+    - tags are categories, topics, themes, or just important words - but not entities.
 
     Note: if the text already contains #tags, please include them in the tags field. Feel free to add more tags.
-    Note: if the text already contains keywords (prefixed by @), please include them in the keywords field. Feel free to add more keywords.
+    Note: if the text already contains entities (prefixed by @), please include them in the entities field. Feel free to add more entities.
     """
 
     output = generate_formatted_output(NoteMetadata, model_name, sys_prompt=sys_prompt, user_prompt=text)

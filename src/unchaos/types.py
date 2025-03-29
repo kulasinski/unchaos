@@ -4,12 +4,11 @@ from typing import List
 
 class NoteMetadata(BaseModel):
     tags: List[str] = []
-    keywords: List[str] = []
     entities: List[str] = []
 
     def strip_prefixes(self):
         self.tags = [tag.strip("#") for tag in self.tags]
-        self.keywords = [keyword.strip("@") for keyword in self.keywords]
+        self.entities = [entity.strip("@") for entity in self.entities]
 
 class SuggestedNodes(BaseModel):
     nested_nodes: List[str] = []
@@ -18,6 +17,12 @@ class SuggestedNodes(BaseModel):
         def split_node(node: str):
             return [n.strip() for n in node.split(">")]
         return [split_node(node) for node in self.nested_nodes]
+    
+class EntityType(str, Enum):
+    PERSON = "PERSON"
+    LOCATION = "LOCATION"
+    ORGANIZATION = "ORGANIZATION"
+    DATE = "DATE"
     
 class QueueStatus(str, Enum):
     PENDING = "PENDING"

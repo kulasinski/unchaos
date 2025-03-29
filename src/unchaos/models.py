@@ -12,8 +12,8 @@ from pydantic import BaseModel, ConfigDict
 from sqlalchemy.orm import Session
 
 from .types import NoteMetadata, QueueTask
-from .db import EdgeDB, NodeDB, NoteEntityDB, NoteKeywordDB, NoteNodeDB, NoteTagDB, NoteURLDB, get_session, NoteDB, SnippetDB, NoteTagDB, SnippetTagDB, NoteKeywordDB, SnippetKeywordDB, QueueDB, get_or_create_token
-from .utils import clear_terminal, clear_terminal_line, containsTagsOnly, extract_tags_and_keywords, fwarn, now_formatted, fsys, split_location_to_nodes
+from .db import EdgeDB, NodeDB, NoteEntityDB, NoteTagDB, NoteURLDB, get_session, NoteDB, SnippetDB, NoteTagDB, SnippetTagDB, NoteEntityDB, SnippetEntityDB, QueueDB, get_or_create_token
+from .utils import clear_terminal, clear_terminal_line, containsTagsOnly, extract_tags_and_entities, fwarn, now_formatted, fsys, split_location_to_nodes
 
 class Snippet(BaseModel):
     id: int = None
@@ -21,7 +21,7 @@ class Snippet(BaseModel):
     created_at: datetime = None
     updated_at: datetime = None
     tags: Set[str] = set()
-    keywords: Set[str] = set()
+    entities: Set[str] = set()
 
     def persist(self, note_id: int, db: Session = None) -> None:
         """Creates a new snippet in DB."""
@@ -51,20 +51,20 @@ class Snippet(BaseModel):
             token = get_or_create_token(tag, db=db)
             db.add(SnippetTagDB(snippet_id=new_snippet.id, token_id=token.id))
 
-        # Insert keywords
-        for keyword in self.keywords:
-            token = get_or_create_token(keyword, db=db)
-            db.add(SnippetKeywordDB(snippet_id=new_snippet.id, token_id=token.id))
+        # Insert entities
+        for entity in self.entities:
+            token = get_or_create_token(entity, db=db)
+            db.add(SnippetEntityDB(snippet_id=new_snippet.id, token_id=token.id))
 
         db.commit()
 
     def display(self, ord: int=None):
         snippet_content = self.content
-        # Highlight tags and keywords
+        # Highlight tags and entities
         for tag in self.tags:
             snippet_content = snippet_content.replace(f"#{tag}", f"{Fore.GREEN}#{tag}{Style.RESET_ALL}")
-        for keyword in self.keywords:
-            snippet_content = snippet_content.replace(f"@{keyword}", f"{Fore.MAGENTA}@{keyword}{Style.RESET_ALL}")
+        for entity in self.entities:
+            snippet_content = snippet_content.replace(f"@{entity}", f"{Fore.MAGENTA}@{entity}{Style.RESET_ALL}")
         # Display snippet
         print(f"{Fore.CYAN}[{ord}]{Style.RESET_ALL} {snippet_content}")
 
@@ -77,7 +77,7 @@ class Snippet(BaseModel):
             created_at=snippet.created_at,
             updated_at=snippet.updated_at,
             tags={tag.tag.value for tag in snippet.tags},  # Extract the value from TokenDB
-            keywords={keyword.keyword.value for keyword in snippet.keywords},  # Extract the value from TokenDB
+            entities={entity.entity.value for entity in snippet.entities},  # Extract the value from TokenDB
         )
     
     @staticmethod
@@ -99,12 +99,11 @@ class Note(BaseModel):
     embedding: Sequence[float]|None = None
     active: bool = True
     snippets: List[Snippet] = []
-    entities: Set[str] = set()
-    urls: Set[str] = set()
     tags: Set[str] = set()     # own not snippets'
-    keywords: Set[str] = set() # own not snippets'
+    entities: Set[str] = set() # own not snippets'
+    urls: Set[str] = set()
 
-    __token_fields = ["tags", "keywords", "entities", "urls"]
+    __token_fields = ["tags", "entities", "entities", "urls"]
 
     # --- Token handling ---
 
@@ -117,12 +116,12 @@ class Note(BaseModel):
         return list(tags)
     
     @property
-    def keywordsAll(self) -> List[str]:
-        """ Return all keywords from snippets and note """
-        keywords = self.keywords.copy()
+    def entitiesAll(self) -> List[str]:
+        """ Return all entities from snippets and note """
+        entities = self.entities.copy()
         for snippet in self.snippets:
-            keywords.update(snippet.keywords)
-        return list(keywords)
+            entities.update(snippet.entities)
+        return list(entities)
     
     def display(self, width: int = 80, footer: bool = True):
         """Displays the note in a formatted way."""
@@ -136,7 +135,7 @@ class Note(BaseModel):
             
         if footer:
             print("-" * width)
-            print(f"{Fore.CYAN}Keywords: {Fore.MAGENTA}{', '.join(['@'+kw for kw in self.keywordsAll])}{Style.RESET_ALL}")
+            print(f"{Fore.CYAN}Entities: {Fore.MAGENTA}{', '.join(['@'+kw for kw in self.entitiesAll])}{Style.RESET_ALL}")
             print(f"{Fore.CYAN}Tags: {Fore.GREEN}{', '.join(['#'+tag for tag in self.tagsAll])}{Style.RESET_ALL}")
             print("=" * width + "\n")
 
@@ -237,10 +236,6 @@ class Note(BaseModel):
             NoteTagDB(tag=get_or_create_token(tag, db=db), note_id=note.id)
             for tag in self.tags
         ]
-        note.keywords = [
-            NoteKeywordDB(keyword=get_or_create_token(kw, db=db), note_id=note.id)
-            for kw in self.keywords
-        ]
         note.entities = [
             NoteEntityDB(entity=get_or_create_token(entity, db=db), note_id=note.id)
             for entity in self.entities
@@ -301,13 +296,12 @@ class Note(BaseModel):
                     created_at=snippet.created_at,
                     updated_at=snippet.updated_at,
                     tags={tag.tag.value for tag in snippet.tags},
-                    keywords={keyword.keyword.value for keyword in snippet.keywords},
+                    entities={entity.entity.value for entity in snippet.entities},
                 ) for snippet in note.snippets
             ],
             entities={entity.entity.value for entity in note.entities},
-            urls={url.url.value for url in note.urls},
             tags={tag.tag.value for tag in note.tags},
-            keywords={keyword.keyword.value for keyword in note.keywords},
+            urls={url.url.value for url in note.urls},
         )
 
     @staticmethod
@@ -372,19 +366,19 @@ class Note(BaseModel):
 
     @staticmethod
     def search(filters: List[str], db: Session = None) -> List['Note']:
-        """Search for notes based on tag, keyword, or content filters."""
+        """Search for notes based on tag, entity, or content filters."""
         db = db or get_session()
 
         if filters:
             raise NotImplementedError("Filtering notes is not yet implemented?")
 
-        query = db.query(NoteDB) #.join(SnippetDB).outerjoin(SnippetTagDB).outerjoin(SnippetKeywordDB)
+        query = db.query(NoteDB)
 
         for filter_str in filters:
             if filter_str.startswith("#"):
                 query = query.filter(SnippetTagDB.tag == filter_str[1:])
             elif filter_str.startswith("@"):
-                query = query.filter(SnippetKeywordDB.keyword == filter_str[1:])
+                query = query.filter(SnippetEntityDB.entity == filter_str[1:])
             else:
                 query = query.filter(SnippetDB.content.ilike(f"%{filter_str}%"))
 
@@ -394,11 +388,11 @@ class Note(BaseModel):
     # --- Snippets Handling ---)
 
     def add_snippet(self, content: str, display: bool=False, db: Session = None) -> SnippetDB:
-        """Adds a snippet to a note and DB and extracts tags/keywords."""
+        """Adds a snippet to a note and DB and extracts tags/entities."""
         db = db or get_session()
 
-        # Extract tags and keywords
-        tags, keywords = extract_tags_and_keywords(content)
+        # Extract tags and entities
+        tags, entities = extract_tags_and_entities(content)
 
         # check if snippet is composed of tags only. If so, do not add a snippet, instead add tags to note
         if containsTagsOnly(content):
@@ -413,7 +407,7 @@ class Note(BaseModel):
         snippet = Snippet(
             content=content,
             tags=tags,
-            keywords=keywords,
+            entities=entities,
         )
 
         if display:
@@ -458,23 +452,7 @@ class Note(BaseModel):
 def update_note_metadata(note: NoteDB, metadata: NoteMetadata, db: Session = None):
     """Updates the metadata of a note."""
     raise NotImplementedError("Update note metadata not implemented")
-    db = db or get_session()
-
-    # Clear existing relationships to avoid duplicates
-    note.tags.clear()
-    note.keywords.clear()
-    note.entities.clear()
-
-    # Add new relationships properly
-    note.tags.extend([NoteTagDB(tag=tag, note_id=note.id) for tag in metadata.tags])
-    note.keywords.extend([NoteKeywordDB(keyword=kw, note_id=note.id) for kw in metadata.keywords])
-    note.entities.extend([NoteEntityDB(entity=entity, note_id=note.id) for entity in metadata.entities])
-
-    db.add(note)  # Explicitly add the note to the session
-    db.commit()
-    db.refresh(note)  # Refresh to reflect new DB state
-
-    print(f"✅ Updated metadata for note ID={note.id} with tags={metadata.tags}, keywords={metadata.keywords}, entities={metadata.entities}")
+    
 
 
 # QUEUE OPERATIONS

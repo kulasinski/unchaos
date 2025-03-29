@@ -37,7 +37,6 @@ class NoteDB(Base):
     snippets = relationship("SnippetDB", back_populates="note", cascade="all, delete-orphan")
     queue = relationship("QueueDB", back_populates="note", cascade="all, delete-orphan")
     tags = relationship("NoteTagDB", back_populates="note", cascade="all, delete-orphan")
-    keywords = relationship("NoteKeywordDB", back_populates="note", cascade="all, delete-orphan")
     entities = relationship("NoteEntityDB", back_populates="note", cascade="all, delete-orphan")
     urls = relationship("NoteURLDB", back_populates="note", cascade="all, delete-orphan")
     nodes = relationship("NoteNodeDB", back_populates="note", cascade="all, delete-orphan")
@@ -53,7 +52,7 @@ class SnippetDB(Base):
 
     note = relationship("NoteDB", back_populates="snippets")
     tags = relationship("SnippetTagDB", back_populates="snippet", cascade="all, delete-orphan")
-    keywords = relationship("SnippetKeywordDB", back_populates="snippet", cascade="all, delete-orphan")
+    entities = relationship("SnippetEntityDB", back_populates="snippet", cascade="all, delete-orphan")
 
 class TokenDB(Base):
     __tablename__ = "tokens"
@@ -63,9 +62,8 @@ class TokenDB(Base):
 
     note_tags = relationship("NoteTagDB", back_populates="tag", cascade="all, delete-orphan")
     snippet_tags = relationship("SnippetTagDB", back_populates="tag", cascade="all, delete-orphan")
-    note_keywords = relationship("NoteKeywordDB", back_populates="keyword", cascade="all, delete-orphan")
-    snippet_keywords = relationship("SnippetKeywordDB", back_populates="keyword", cascade="all, delete-orphan")
     note_entities = relationship("NoteEntityDB", back_populates="entity", cascade="all, delete-orphan")
+    snippet_entities = relationship("SnippetEntityDB", back_populates="entity", cascade="all, delete-orphan")
     note_urls = relationship("NoteURLDB", back_populates="url", cascade="all, delete-orphan")
 
     def __repr__(self):
@@ -91,31 +89,22 @@ class NoteTagDB(Base):
     note = relationship("NoteDB", back_populates="tags")
     tag = relationship("TokenDB", foreign_keys=[token_id])
 
-class SnippetKeywordDB(Base):
-    __tablename__ = "snippet_keywords"
+class SnippetEntityDB(Base):
+    __tablename__ = "snippet_entities"
 
     snippet_id = Column(Integer, ForeignKey("snippets.id", ondelete="CASCADE"), primary_key=True)
     token_id = Column(Integer, ForeignKey("tokens.id", ondelete="RESTRICT"), primary_key=True)
+    entity_type = Column(String(50), nullable=True)  # see EntityType enum
 
-    snippet = relationship("SnippetDB", back_populates="keywords")
-    keyword = relationship("TokenDB", foreign_keys=[token_id])
-
-class NoteKeywordDB(Base):
-    __tablename__ = "note_keywords"
-
-    note_id = Column(Integer, ForeignKey("notes.id", ondelete="CASCADE"), primary_key=True)
-    token_id = Column(Integer, ForeignKey("tokens.id", ondelete="RESTRICT"), primary_key=True)
-
-    note = relationship("NoteDB", back_populates="keywords")
-    keyword = relationship("TokenDB", foreign_keys=[token_id])
-
-# class SnippetEntity(Base): Snippets are only at the note level! same for URLs, because user does not add them to snippets manually
+    snippet = relationship("SnippetDB", back_populates="entities")
+    entity = relationship("TokenDB", foreign_keys=[token_id])
 
 class NoteEntityDB(Base):
     __tablename__ = "note_entities"
 
     note_id = Column(Integer, ForeignKey("notes.id", ondelete="CASCADE"), primary_key=True)
     token_id = Column(Integer, ForeignKey("tokens.id", ondelete="RESTRICT"), primary_key=True)
+    entity_type = Column(String(50), nullable=True)  # see EntityType enum
 
     note = relationship("NoteDB", back_populates="entities")
     entity = relationship("TokenDB", foreign_keys=[token_id])
@@ -130,18 +119,6 @@ class NoteURLDB(Base):
     url = relationship("TokenDB", foreign_keys=[token_id])
 
 # --- Other Tables ---
-
-# class AIEntry(Base):
-#     __tablename__ = "ai"
-
-#     id = Column(Integer, primary_key=True, autoincrement=True)
-#     note_id = Column(Integer, ForeignKey("notes.id", ondelete="CASCADE"), nullable=False)
-#     snippet_id = Column(Integer, ForeignKey("snippets.id", ondelete="CASCADE"), nullable=True)
-#     content = Column(Text, nullable=False)
-#     content_type = Column(String, nullable=False)  # 'embedding', 'summary', 'chat'
-#     model_name = Column(String, nullable=False)
-#     created_at = Column(DateTime, default=datetime.utcnow)
-#     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 class NodeDB(Base):
     __tablename__ = "nodes"

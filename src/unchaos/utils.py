@@ -4,15 +4,15 @@ from typing import List, Tuple
 
 from colorama import Fore, Style
 
-# Regex for extracting tags (#tag) and keywords (@keyword)
+# Regex for extracting tags (#tag) and entities (@entity)
 TAG_PATTERN = r"#([\w-]+|\"[^\"]+\")"
 KEYWORD_PATTERN = r"@([\w-]+|\"[^\"]+\")"
 
-def extract_tags_and_keywords(text: str) -> Tuple[set, set]:
-    """Extracts tags and keywords from text."""
+def extract_tags_and_entities(text: str) -> Tuple[set, set]:
+    """Extracts tags and entities from text."""
     tags = re.findall(TAG_PATTERN, text)
-    keywords = re.findall(KEYWORD_PATTERN, text)
-    return set(tags), set(keywords)
+    entities = re.findall(KEYWORD_PATTERN, text)
+    return set(tags), set(entities)
 
 def containsTagsOnly(text: str):
     """Returns True if the text contains only tags."""

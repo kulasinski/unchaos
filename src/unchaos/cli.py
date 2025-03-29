@@ -165,12 +165,12 @@ def edit(note_id: int, width: int):
 @click.command()
 @click.argument("filters", nargs=-1)
 def list(filters: List[str]):
-    """Lists notes based on provided filters (tags, keywords, or content)."""
+    """Lists notes based on provided filters (tags, entities, or content)."""
 
     notes = Note.search(filters)
 
     if not filters:
-        click.echo(f"WARNING: Listing ALL {len(notes)} notes... Please provide at least one filter (tag, keyword, or content) for better results.")
+        click.echo(f"WARNING: Listing ALL {len(notes)} notes... Please provide at least one filter (tag, entity, or content) for better results.")
     else:
         click.echo(f"Found {len(notes)} notes matching filters: {filters}")
 
@@ -185,7 +185,7 @@ def list(filters: List[str]):
                    f"{Fore.CYAN}Snippets:{Style.RESET_ALL} {len(note.snippets)} | "\
                    f"{Fore.CYAN}Created at:{Style.RESET_ALL} {note.created_at.strftime('%Y-%m-%d %H:%M:%S')} | "
                    f"{Fore.CYAN}Tags:{Style.RESET_ALL} {Fore.GREEN}{', '.join(['#'+tag for tag in note.tagsAll])}{Style.RESET_ALL} | "\
-                   f"{Fore.CYAN}Keywords:{Style.RESET_ALL} {Fore.MAGENTA}{', '.join(['@'+kw for kw in note.keywordsAll])}{Style.RESET_ALL}"
+                   f"{Fore.CYAN}Entities:{Style.RESET_ALL} {Fore.MAGENTA}{', '.join(['@'+kw for kw in note.entitiesAll])}{Style.RESET_ALL}"
         )
         click.echo("-" * 100)
 

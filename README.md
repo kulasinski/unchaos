@@ -64,7 +64,6 @@ unchaos/
 ## Example usage
 
 # TODO
-* remove keywords -> entities
 * add TIME table with datetime object and scope (SECOND,MINUTE,HOUR,DAY,MONTH,YEAR)
 * supabase storage
 * handle updated_at

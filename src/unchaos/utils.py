@@ -44,6 +44,14 @@ def ferror(content: str):
     """ Format string for error output. """
     return f"{Fore.RED}{content}{Style.RESET_ALL}"
 
+def fentity(content: str):
+    """ Format string for entity output. """
+    return f"{Fore.MAGENTA}@{content}{Style.RESET_ALL}"
+
+def ftag(content: str):
+    """ Format string for tag output. """
+    return f"{Fore.GREEN}#{content}{Style.RESET_ALL}"
+
 def clear_terminal_line():
     print("\n\033[A                             \033[A")
 

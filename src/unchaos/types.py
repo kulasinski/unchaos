@@ -1,6 +1,6 @@
 from enum import Enum
 from pydantic import BaseModel
-from typing import List
+from typing import List, Literal
 
 class NoteMetadata(BaseModel):
     tags: List[str] = []
@@ -24,6 +24,12 @@ class EntityType(str, Enum):
     ORGANIZATION = "ORGANIZATION"
     DATE = "DATE"
     
+class Token(BaseModel):
+    type: Literal["ENTITY", "TAG"]
+    value: str
+    entityType: EntityType | None = None
+    count: int | None = None
+
 class QueueStatus(str, Enum):
     PENDING = "PENDING"
     PROCESSING = "PROCESSING"

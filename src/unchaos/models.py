@@ -1,7 +1,7 @@
 import json
 import signal
 import sys
-from typing import Annotated, ClassVar, List, Optional, Sequence, Set, Union
+from typing import Annotated, ClassVar, List, Literal, Optional, Sequence, Set, Union
 from datetime import datetime
 
 import click
@@ -10,9 +10,10 @@ from prompt_toolkit import prompt
 import networkx as nx
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy.orm import Session
+from sqlalchemy import func as sql_func
 
-from .types import NoteMetadata, QueueTask
-from .db import EdgeDB, NodeDB, NoteEntityDB, NoteTagDB, NoteURLDB, get_session, NoteDB, SnippetDB, NoteTagDB, SnippetTagDB, NoteEntityDB, SnippetEntityDB, QueueDB, get_or_create_token
+from .types import NoteMetadata, QueueTask, Token
+from .db import EdgeDB, NodeDB, NoteEntityDB, NoteTagDB, NoteURLDB, TokenDB, get_session, NoteDB, SnippetDB, NoteTagDB, SnippetTagDB, NoteEntityDB, SnippetEntityDB, QueueDB, get_or_create_token
 from .utils import clear_terminal, clear_terminal_line, containsTagsOnly, extract_tags_and_entities, fwarn, now_formatted, fsys, split_location_to_nodes
 
 class Snippet(BaseModel):
@@ -139,6 +140,42 @@ class Note(BaseModel):
             print(f"{Fore.CYAN}Tags: {Fore.GREEN}{', '.join(['#'+tag for tag in self.tagsAll])}{Style.RESET_ALL}")
             print("=" * width + "\n")
 
+    @staticmethod
+    def display_tokens_in_use(tags: bool = False, 
+                              entities: bool = False, 
+                              order_by: Literal["name","count"] = "count", 
+                              db: Session = None) -> List[Token]:
+        """ Displays all tags and entities used throughout the workspace. Not bound to a particular note. """
+        from collections import Counter
+        db = db or get_session()
+        tokens: List[Token] = []
+        if tags:
+            tags_ = db.query(TokenDB.value, sql_func.count(TokenDB.value).label("count"))\
+                     .join(NoteTagDB, NoteTagDB.token_id == TokenDB.id)\
+                     .group_by(TokenDB.value)\
+                     .union(
+                         db.query(TokenDB.value, sql_func.count(TokenDB.value).label("count"))\
+                         .join(SnippetTagDB, SnippetTagDB.token_id == TokenDB.id)\
+                         .group_by(TokenDB.value)
+                     ).all()
+            # create tokens with count
+            tokens += [Token(type="TAG", value=tag.value, count=tag.count) for tag in tags_]
+        if entities:
+            entities_ = db.query(TokenDB.value, sql_func.count(TokenDB.value).label("count"))\
+                        .join(NoteEntityDB, NoteEntityDB.token_id == TokenDB.id)\
+                        .group_by(TokenDB.value)\
+                        .union(
+                            db.query(TokenDB.value, sql_func.count(TokenDB.value).label("count"))\
+                            .join(SnippetEntityDB, SnippetEntityDB.token_id == TokenDB.id)\
+                            .group_by(TokenDB.value)
+                        ).all()
+            # create tokens with count
+            tokens += [Token(type="ENTITY", value=entity.value, count=entity.count) for entity in entities_]
+        # Sort tokens by count
+        tokens.sort(key=lambda x: x.value if order_by=="name" else x.count, 
+                    reverse=order_by=="count")
+        return tokens
+        
     # --- Input ---
 
     def input(self, db: Session = None):

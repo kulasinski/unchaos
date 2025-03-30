@@ -5,12 +5,13 @@ from typing import List, Union
 
 import toml
 import click
+from tabulate import tabulate, SEPARATING_LINE
 from colorama import Fore, Style, init
 
 from .config import config
 from .db import get_session
-from .types import QueueStatus
-from .utils import clear_terminal, ferror, fsys, split_location_to_nodes
+from .types import QueueStatus, Token
+from .utils import clear_terminal, ferror, fsys, ftag, fentity, fwarn, split_location_to_nodes
 from .models import Graph, Note, clear_queue
 
 @click.group()
@@ -189,6 +190,60 @@ def list(filters: List[str]):
         )
         click.echo("-" * 100)
 
+# --- Command to Show Tags, Entities, and Tokens ---
+
+@cli.command(name="tags")
+@click.option("--order_by", "-o", type=str, default="count", help="Order by count or name")
+def show_tags(order_by: str):
+    """Displays all tags in the database. Order by count or name."""
+    tags: List[Token] = Note.display_tokens_in_use(tags=True, order_by=order_by)
+    unq_tags = len(tags)
+    tot_tags = sum(tag.count for tag in tags)
+    # click.echo(f"Tags in use: {len(tags)}")
+
+    headers = ["Tag", "Count"]
+    table = [[ftag(tag.value), tag.count] for tag in tags]
+    table += ["",
+        [fwarn("UNIQUE"), unq_tags],
+        [fwarn("TOTAL"), tot_tags],
+    ]
+    click.echo(tabulate(table, headers=headers, tablefmt="simple_outline"))
+
+@cli.command(name="entities")
+@click.option("--order_by", "-o", type=str, default="count", help="Order by count or name")
+def show_entities(order_by: str):
+    """Displays all entities in the database. Order by count or name."""
+    entities: List[Token] = Note.display_tokens_in_use(entities=True, order_by=order_by)
+    unq_entities = len(entities)
+    tot_entities = sum(e.count for e in entities)
+
+    headers = ["Entity", "Count", "Type"]
+    table = [[fentity(e.value), e.count, e.entityType or "?"] for e in entities]
+    table += ["",
+        [fwarn("UNIQUE"), unq_entities, ""],
+        [fwarn("TOTAL"), tot_entities, ""],
+    ]
+    click.echo(tabulate(table, headers=headers, tablefmt="simple_outline"))
+
+@cli.command(name="tokens")
+@click.option("--order_by", "-o", type=str, default="count", help="Order by count or name")
+def show_tokens(order_by: str):
+    """Displays all tokens in the database. Order by count or name."""
+    tokens: List[Token] = Note.display_tokens_in_use(tags=True, entities=True, order_by=order_by)
+    unq_tokens = len(tokens)
+    tot_tokens = sum(t.count for t in tokens)
+
+    headers = ["Tag | Entity", "Type", "Entity Type", "Count"]
+    table = [[ftag(t.value) if t.type=='TAG' else fentity(t.value), 
+              t.type, 
+              t.entityType or ('-' if t.type=='TAG' else '?'), 
+              t.count] for t in tokens]
+    table += ["",
+        [fwarn("UNIQUE"), unq_tokens, ""],
+        [fwarn("TOTAL"), tot_tokens, ""],
+    ]
+    click.echo(tabulate(table, headers=headers, tablefmt="simple_outline"))
+
 # --- Command to List Tasks in the Queue ---
 @click.group()
 def queue():
@@ -287,8 +342,6 @@ def show_graph():
     """Displays the graph structure of the notes."""
     Graph.fromDB().display_nodes()
 
-# --- Command for Graph Handling ---
-
 # --- AI Integration (Dummy) ---
 @click.command()
 @click.argument("note_id", type=int)
@@ -324,6 +377,9 @@ cli.add_command(init)
 cli.add_command(create)
 cli.add_command(delete)
 cli.add_command(show)
+cli.add_command(show_tags)
+cli.add_command(show_entities)
+cli.add_command(show_tokens)
 cli.add_command(edit)
 cli.add_command(list)
 cli.add_command(graph)

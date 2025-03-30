@@ -23,6 +23,7 @@ python3 -m pip install --force-reinstall dist/*.whl --break-system-packages # In
 - by id (integer) `unchaos delete <id>`
 - by title (string) `unchaos delete <title>`
 - using wildcard in "", e.g. `unchaos delete "untitled*"`
+- show tags or entities or both (tokens) in use: `unchaos entities [-o name]`
 
 ## Tips
 
@@ -66,11 +67,10 @@ unchaos/
 # TODO
 * add TIME table with datetime object and scope (SECOND,MINUTE,HOUR,DAY,MONTH,YEAR)
 * supabase storage
+* let AI assign entitiy type
 * handle updated_at
 * tabela do urli i quotesów i pytań (2 ostatnie moze tylko przez tagi?)- regex 
 * chat - oparty na SQL searchu + semantic search
 * smarter search
-* add quote field, next to tags and kws
-* leverage copilot workspace!
 * add: unchaos tags/kw to display those in use
 * cron sync every night

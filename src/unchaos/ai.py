@@ -1,12 +1,14 @@
 from typing import Annotated, Any, List, Sequence, Union
+from datetime import datetime
+import re
 
 from ollama import EmbedResponse, chat, embed as embed_ollama
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from unchaos.db import NoteDB, QueueDB, QueueStatus, QueueTask
+from unchaos.db import NoteDB, QueueDB, QueueStatus, QueueTask, TimeDB, get_or_create_token
 from unchaos.models import update_note_metadata
-from unchaos.types import NoteMetadata, SuggestedNodes
+from unchaos.types import NoteMetadata, SuggestedNodes, TimeScope
 from .config import config
 
 """ Load relevant configuration parameters. """
@@ -139,3 +141,36 @@ def handle_queue_task(task: QueueDB, note: NoteDB, db: Session):
     # task.status_details = status_details
     # task.updated_at = datetime.utcnow()
     # db.commit()
+
+def extract_dates(text: str) -> List[dict]:
+    """Extract dates from text using regex."""
+    date_patterns = [
+        r"\b\d{4}-\d{2}-\d{2}\b",  # YYYY-MM-DD
+        r"\b\d{2}/\d{2}/\d{4}\b",  # MM/DD/YYYY
+        r"\b\d{2}-\d{2}-\d{4}\b",  # DD-MM-YYYY
+        r"\b\d{2} \w+ \d{4}\b",    # DD Month YYYY
+        r"\b\w+ \d{2}, \d{4}\b",   # Month DD, YYYY
+    ]
+    dates = []
+    for pattern in date_patterns:
+        matches = re.findall(pattern, text)
+        for match in matches:
+            dates.append({"literal": match, "value": datetime.strptime(match, "%Y-%m-%d")})
+    return dates
+
+def append_dates_to_time_table(dates: List[dict], db: Session):
+    """Append dates to the TIME table."""
+    for date in dates:
+        time_entry = TimeDB(
+            value=date["value"],
+            literal=date["literal"],
+            scope=TimeScope.DAY  # Example scope, adjust as needed
+        )
+        db.add(time_entry)
+    db.commit()
+
+def scan_notes_for_dates(note: NoteDB, db: Session):
+    """Scan notes for dates and append them to the TIME table."""
+    for snippet in note.snippets:
+        dates = extract_dates(snippet.content)
+        append_dates_to_time_table(dates, db)

@@ -244,6 +244,17 @@ def show_tokens(order_by: str):
     ]
     click.echo(tabulate(table, headers=headers, tablefmt="simple_outline"))
 
+# --- Command to Show URLs ---
+@cli.command(name="show_urls")
+def show_urls():
+    """Displays all URLs stored in the database."""
+    db = get_session()
+    urls = db.query(NoteURLDB).all()
+
+    headers = ["Note ID", "Note Title", "URL"]
+    table = [[url.note_id, url.note.title, url.url.value] for url in urls]
+    click.echo(tabulate(table, headers=headers, tablefmt="simple_outline"))
+
 # --- Command to List Tasks in the Queue ---
 @click.group()
 def queue():
@@ -380,6 +391,7 @@ cli.add_command(show)
 cli.add_command(show_tags)
 cli.add_command(show_entities)
 cli.add_command(show_tokens)
+cli.add_command(show_urls)
 cli.add_command(edit)
 cli.add_command(list)
 cli.add_command(graph)

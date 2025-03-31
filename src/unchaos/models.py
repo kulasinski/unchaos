@@ -13,8 +13,8 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func as sql_func
 
 from .types import NoteMetadata, QueueTask, Token
-from .db import EdgeDB, NodeDB, NoteEntityDB, NoteTagDB, NoteURLDB, TokenDB, get_session, NoteDB, SnippetDB, NoteTagDB, SnippetTagDB, NoteEntityDB, SnippetEntityDB, QueueDB, get_or_create_token
-from .utils import clear_terminal, clear_terminal_line, containsTagsOnly, extract_tags_and_entities, fwarn, now_formatted, fsys, split_location_to_nodes
+from .db import EdgeDB, NodeDB, NoteEntityDB, NoteTagDB, NoteURLDB, TokenDB, get_session, NoteDB, SnippetDB, NoteTagDB, SnippetTagDB, NoteEntityDB, SnippetEntityDB, QueueDB, get_or_create_token, get_or_create_url
+from .utils import clear_terminal, clear_terminal_line, containsTagsOnly, extract_tags_and_entities, fwarn, now_formatted, fsys, split_location_to_nodes, extract_urls
 
 class Snippet(BaseModel):
     id: int = None
@@ -23,6 +23,7 @@ class Snippet(BaseModel):
     updated_at: datetime = None
     tags: Set[str] = set()
     entities: Set[str] = set()
+    urls: Set[str] = set()
 
     def persist(self, note_id: int, db: Session = None) -> None:
         """Creates a new snippet in DB."""
@@ -57,6 +58,11 @@ class Snippet(BaseModel):
             token = get_or_create_token(entity, db=db)
             db.add(SnippetEntityDB(snippet_id=new_snippet.id, token_id=token.id))
 
+        # Insert URLs
+        for url in self.urls:
+            token = get_or_create_url(url, db=db)
+            db.add(NoteURLDB(note_id=note_id, token_id=token.id))
+
         db.commit()
 
     def display(self, ord: int=None):
@@ -66,6 +72,9 @@ class Snippet(BaseModel):
             snippet_content = snippet_content.replace(f"#{tag}", f"{Fore.GREEN}#{tag}{Style.RESET_ALL}")
         for entity in self.entities:
             snippet_content = snippet_content.replace(f"@{entity}", f"{Fore.MAGENTA}@{entity}{Style.RESET_ALL}")
+        # Highlight URLs
+        for url in self.urls:
+            snippet_content = snippet_content.replace(url, f"{Fore.LIGHTBLACK_EX}{url}{Style.RESET_ALL}")
         # Display snippet
         print(f"{Fore.CYAN}[{ord}]{Style.RESET_ALL} {snippet_content}")
 
@@ -79,6 +88,7 @@ class Snippet(BaseModel):
             updated_at=snippet.updated_at,
             tags={tag.tag.value for tag in snippet.tags},  # Extract the value from TokenDB
             entities={entity.entity.value for entity in snippet.entities},  # Extract the value from TokenDB
+            urls={url.url.value for url in snippet.note.urls},  # Extract the value from TokenDB
         )
     
     @staticmethod
@@ -124,6 +134,14 @@ class Note(BaseModel):
             entities.update(snippet.entities)
         return list(entities)
     
+    @property
+    def urlsAll(self) -> List[str]:
+        """ Return all URLs from snippets and note """
+        urls = self.urls.copy()
+        for snippet in self.snippets:
+            urls.update(snippet.urls)
+        return list(urls)
+
     def display(self, width: int = 80, footer: bool = True):
         """Displays the note in a formatted way."""
         print("\n"+"=" * width)
@@ -138,6 +156,7 @@ class Note(BaseModel):
             print("-" * width)
             print(f"{Fore.CYAN}Entities: {Fore.MAGENTA}{', '.join(['@'+kw for kw in self.entitiesAll])}{Style.RESET_ALL}")
             print(f"{Fore.CYAN}Tags: {Fore.GREEN}{', '.join(['#'+tag for tag in self.tagsAll])}{Style.RESET_ALL}")
+            print(f"{Fore.CYAN}URLs: {Fore.LIGHTBLACK_EX}{', '.join(self.urlsAll)}{Style.RESET_ALL}")
             print("=" * width + "\n")
 
     @staticmethod
@@ -278,7 +297,7 @@ class Note(BaseModel):
             for entity in self.entities
         ]
         note.urls = [
-            NoteURLDB(url=get_or_create_token(url, db=db), note_id=note.id)
+            NoteURLDB(url=get_or_create_url(url, db=db), note_id=note.id)
             for url in self.urls
         ]
 
@@ -334,6 +353,7 @@ class Note(BaseModel):
                     updated_at=snippet.updated_at,
                     tags={tag.tag.value for tag in snippet.tags},
                     entities={entity.entity.value for entity in snippet.entities},
+                    urls={url.url.value for url in snippet.note.urls},
                 ) for snippet in note.snippets
             ],
             entities={entity.entity.value for entity in note.entities},
@@ -361,7 +381,7 @@ class Note(BaseModel):
     def delete(self, confirm: bool = True, db: Session = None) -> None:
         """Permanently deletes a note."""
         db = db or get_session()
-        note = db.query(NoteDB).filter(NoteDB.id == self.id).first()
+        note = db.query(NoteDB).filter_by(id=self.id).first()
         if not note:
             raise ValueError(f"Note with ID={self.id} not found.")
         
@@ -428,8 +448,9 @@ class Note(BaseModel):
         """Adds a snippet to a note and DB and extracts tags/entities."""
         db = db or get_session()
 
-        # Extract tags and entities
+        # Extract tags, entities, and URLs
         tags, entities = extract_tags_and_entities(content)
+        urls = extract_urls(content)
 
         # check if snippet is composed of tags only. If so, do not add a snippet, instead add tags to note
         if containsTagsOnly(content):
@@ -445,6 +466,7 @@ class Note(BaseModel):
             content=content,
             tags=tags,
             entities=entities,
+            urls=urls,
         )
 
         if display:

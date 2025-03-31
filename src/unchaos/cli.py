@@ -9,7 +9,7 @@ from tabulate import tabulate, SEPARATING_LINE
 from colorama import Fore, Style, init
 
 from .config import config
-from .db import get_session
+from .db import NoteURLDB, get_session
 from .types import QueueStatus, Token
 from .utils import clear_terminal, ferror, fsys, ftag, fentity, fwarn, split_location_to_nodes
 from .models import Graph, Note, clear_queue
@@ -245,7 +245,7 @@ def show_tokens(order_by: str):
     click.echo(tabulate(table, headers=headers, tablefmt="simple_outline"))
 
 # --- Command to Show URLs ---
-@cli.command(name="show_urls")
+@cli.command(name="url")
 def show_urls():
     """Displays all URLs stored in the database."""
     db = get_session()

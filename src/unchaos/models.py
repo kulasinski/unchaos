@@ -13,8 +13,8 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func as sql_func
 
 from .types import NoteMetadata, QueueTask, Token
-from .db import EdgeDB, NodeDB, NoteEntityDB, NoteTagDB, NoteURLDB, TokenDB, get_session, NoteDB, SnippetDB, NoteTagDB, SnippetTagDB, NoteEntityDB, SnippetEntityDB, QueueDB, get_or_create_token, get_or_create_url
-from .utils import clear_terminal, clear_terminal_line, containsTagsOnly, extract_tags_and_entities, fwarn, now_formatted, fsys, split_location_to_nodes, extract_urls
+from .db import EdgeDB, NodeDB, NoteEntityDB, NoteTagDB, NoteURLDB, TokenDB, get_session, NoteDB, SnippetDB, NoteTagDB, SnippetTagDB, NoteEntityDB, SnippetEntityDB, QueueDB, get_or_create_token, TimeDB, NoteTimeDB, SnippetTimeDB
+from .utils import clear_terminal, clear_terminal_line, containsTagsOnly, extract_tags_and_entities, fwarn, now_formatted, fsys, split_location_to_nodes
 
 class Snippet(BaseModel):
     id: int = None
@@ -109,7 +109,7 @@ class Note(BaseModel):
     custom_fields: dict|None = {}
     embedding: Sequence[float]|None = None
     active: bool = True
-    snippets: List[Snippet] = []
+    snippets: List<Snippet> = []
     tags: Set[str] = set()     # own not snippets'
     entities: Set[str] = set() # own not snippets'
     urls: Set[str] = set()
@@ -247,6 +247,12 @@ class Note(BaseModel):
                 # --- Edit title ---
                 self.title = prompt("Title (edit): ", default=self.title)
                 self.persist(db=db)
+                marked_for_reinput = True
+                break
+            if content.startswith("/time"):
+                # --- Add time ---
+                literal = content.split(" ", 1)[1]
+                self.add_time(literal, db=db)
                 marked_for_reinput = True
                 break
             self.add_snippet(content, display=True, db=db)
@@ -480,6 +486,21 @@ class Note(BaseModel):
         self.snippets.append(snippet)
 
         return new_snippet
+
+    def add_time(self, literal: str, db: Session = None):
+        """Adds a time entry to the TIME table."""
+        db = db or get_session()
+        time_entry = TimeDB(
+            value=datetime.now(),  # Example value, adjust as needed
+            literal=literal,
+            scope=None  # Example scope, adjust as needed
+        )
+        db.add(time_entry)
+        db.commit()
+        db.refresh(time_entry)
+        note_time_entry = NoteTimeDB(note_id=self.id, time_id=time_entry.id)
+        db.add(note_time_entry)
+        db.commit()
 
     # --- Queue Operations ---
 

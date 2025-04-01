@@ -3,7 +3,7 @@ from datetime import datetime
 import os
 
 from sqlalchemy import (
-    create_engine, Column, Integer, String, Boolean, DateTime, ForeignKey, Text
+    create_engine, Column, Integer, String, Boolean, DateTime, ForeignKey, Text, Enum as SQLAEnum, UniqueConstraint, CheckConstraint
 )
 from sqlalchemy.orm import declarative_base, relationship, sessionmaker, Session
 
@@ -40,6 +40,7 @@ class NoteDB(Base):
     entities = relationship("NoteEntityDB", back_populates="note", cascade="all, delete-orphan")
     urls = relationship("NoteURLDB", back_populates="note", cascade="all, delete-orphan")
     nodes = relationship("NoteNodeDB", back_populates="note", cascade="all, delete-orphan")
+    times = relationship("NoteTimeDB", back_populates="note", cascade="all, delete-orphan")
 
 class SnippetDB(Base):
     __tablename__ = "snippets"
@@ -53,6 +54,7 @@ class SnippetDB(Base):
     note = relationship("NoteDB", back_populates="snippets")
     tags = relationship("SnippetTagDB", back_populates="snippet", cascade="all, delete-orphan")
     entities = relationship("SnippetEntityDB", back_populates="snippet", cascade="all, delete-orphan")
+    times = relationship("SnippetTimeDB", back_populates="snippet", cascade="all, delete-orphan")
 
 class TokenDB(Base):
     __tablename__ = "tokens"
@@ -118,6 +120,24 @@ class NoteURLDB(Base):
     note = relationship("NoteDB", back_populates="urls")
     url = relationship("TokenDB", foreign_keys=[token_id])
 
+class NoteTimeDB(Base):
+    __tablename__ = "note_times"
+
+    note_id = Column(Integer, ForeignKey("notes.id", ondelete="CASCADE"), primary_key=True)
+    time_id = Column(Integer, ForeignKey("times.id", ondelete="CASCADE"), primary_key=True)
+
+    note = relationship("NoteDB", back_populates="times")
+    time = relationship("TimeDB", back_populates="note_times")
+
+class SnippetTimeDB(Base):
+    __tablename__ = "snippet_times"
+
+    snippet_id = Column(Integer, ForeignKey("snippets.id", ondelete="CASCADE"), primary_key=True)
+    time_id = Column(Integer, ForeignKey("times.id", ondelete="CASCADE"), primary_key=True)
+
+    snippet = relationship("SnippetDB", back_populates="times")
+    time = relationship("TimeDB", back_populates="snippet_times")
+
 # --- Other Tables ---
 
 class NodeDB(Base):
@@ -167,6 +187,35 @@ class QueueDB(Base):
 
     def __repr__(self):
         return f"<QueueDB(id={self.id}, note_id={self.note_id}, status={self.status})>"
+
+class TimeScope(Enum):
+    SECOND = "SECOND"
+    MINUTE = "MINUTE"
+    HOUR = "HOUR"
+    DAY = "DAY"
+    WEEK = "WEEK"
+    MONTH = "MONTH"
+    YEAR = "YEAR"
+    CENTURY = "CENTURY"
+
+class TimeDB(Base):
+    __tablename__ = "times"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    value = Column(DateTime(timezone=True), nullable=False)
+    literal = Column(String, nullable=False)
+    scope = Column(SQLAEnum(TimeScope), nullable=True)
+
+    note_times = relationship("NoteTimeDB", back_populates="time", cascade="all, delete-orphan")
+    snippet_times = relationship("SnippetTimeDB", back_populates="time", cascade="all, delete-orphan")
+
+    __table_args__ = (
+        UniqueConstraint('value', 'literal', 'scope', name='_value_literal_scope_uc'),
+        CheckConstraint(
+            "scope IN ('SECOND', 'MINUTE', 'HOUR', 'DAY', 'WEEK', 'MONTH', 'YEAR', 'CENTURY')",
+            name='check_scope'
+        ),
+    )
 
 # --- Database Initialization ---
 def init_db():

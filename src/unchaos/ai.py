@@ -6,9 +6,9 @@ from ollama import EmbedResponse, chat, embed as embed_ollama
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from unchaos.db import NoteDB, QueueDB, QueueStatus, QueueTask, TimeDB, get_or_create_token
-from unchaos.models import update_note_metadata
-from unchaos.types import NoteMetadata, SuggestedNodes, TimeScope
+from unchaos.db import NoteDB, QueueDB, QueueStatus, TimeDB, get_or_create_token
+from unchaos.models import Note, update_note_metadata
+from unchaos.types import NoteMetadata, QueueTask, SuggestedNodes, TimeScope
 from .config import config
 
 """ Load relevant configuration parameters. """
@@ -109,7 +109,7 @@ def embed(input: Union[str, List[str]]) -> Union[Sequence[Sequence[float]], Sequ
     else:
         return embed_response.embeddings
     
-def handle_queue_task(task: QueueDB, note: NoteDB, db: Session):
+def handle_queue_task(task: QueueDB, note: Note, db: Session):
     """Handle a task from the queue."""
     print(f"Handling task {task.task} for note {note.id}...")
     status = None
@@ -119,9 +119,10 @@ def handle_queue_task(task: QueueDB, note: NoteDB, db: Session):
     if task.task == QueueTask.ASSIGN_METADATA:
         try:
             note_snippets = '\n'.join([snippet.content for snippet in note.snippets])
-            metadata = assign_metadata_to_text(note_snippets)
-            update_note_metadata(note, metadata, db=db)
-            status = QueueStatus.COMPLETED  
+            metadata: NoteMetadata = assign_metadata_to_text(note_snippets)
+            print(metadata)
+            # update_note_metadata(note, metadata, db=db)
+            # status = QueueStatus.COMPLETED  
         except ConnectionError as e:
             print(f"Error assigning metadata: {e}")
             raise e

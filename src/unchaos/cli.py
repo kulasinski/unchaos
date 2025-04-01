@@ -8,11 +8,13 @@ import click
 from tabulate import tabulate, SEPARATING_LINE
 from colorama import Fore, Style, init
 
+from unchaos.ai import handle_queue_task
+
 from .config import config
 from .db import NoteURLDB, get_session
-from .types import QueueStatus, Token
+from .types import QueueStatus, QueueTask, Token
 from .utils import clear_terminal, ferror, fstatus, fsys, ftag, fentity, fwarn, split_location_to_nodes, format_dt
-from .models import Graph, Note, clear_queue
+from .models import Graph, Note, clear_queue, list_queue
 
 @click.group()
 def cli():
@@ -397,14 +399,24 @@ def magick():
     click.echo("🔮 Magick begins... Unchaosing your notes...")
     
     """ Getting tasks from the queue and the related notes """
-    tasks = list_queue(db=get_session())
+    db = get_session()
+    tasks = list_queue(db=db)
     """ Order tasks by the task type: ASSIGN_METADATA, SUGGEST_NODES, EMBED """
     order = {QueueTask.ASSIGN_METADATA: 1, QueueTask.SUGGEST_NODES: 2, QueueTask.EMBED: 3}
     tasks = sorted(tasks, key=lambda task: order[task.task])
-    db = get_session()
+    click.echo(f"Found {len(tasks)} tasks in the queue.")
+
+    # Handle task one by one
     for task in tasks:
-        note = get_note_by_id(task.note_id, db=db)
+        print(fsys(f"Handling task {task.task} for note {task.note_id}..."))
+        note = Note.get(task.note_id, db=db)
+        if not note:
+            click.echo(ferror(f"Note with ID {task.note_id} not found."))
+            continue
         handle_queue_task(task, note, db=db)
+
+        break # TODO temp
+
     click.echo("🔮 Magick complete! ✅")
 
 # ----------------------------

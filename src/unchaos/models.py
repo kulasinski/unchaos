@@ -12,9 +12,9 @@ from pydantic import BaseModel, ConfigDict
 from sqlalchemy.orm import Session
 from sqlalchemy import func as sql_func
 
-from .types import NoteMetadata, QueueTask, Token
+from .types import NoteMetadata, QueueTask, Time, Token
 from .db import EdgeDB, NodeDB, NoteEntityDB, NoteTagDB, NoteURLDB, TokenDB, get_session, NoteDB, SnippetDB, NoteTagDB, SnippetTagDB, NoteEntityDB, SnippetEntityDB, QueueDB, get_or_create_token, TimeDB, NoteTimeDB, SnippetTimeDB
-from .utils import clear_terminal, clear_terminal_line, containsTagsOnly, extract_tags_and_entities, fwarn, now_formatted, fsys, split_location_to_nodes
+from .utils import clear_terminal, clear_terminal_line, containsTagsOnly, extract_tags_and_entities, fentity, ftag, fwarn, now_formatted, fsys, split_location_to_nodes
 
 class Snippet(BaseModel):
     id: int = None
@@ -23,7 +23,7 @@ class Snippet(BaseModel):
     updated_at: datetime = None
     tags: Set[str] = set()
     entities: Set[str] = set()
-    urls: Set[str] = set()
+    times: Set[Time] = set() 
 
     def persist(self, note_id: int, db: Session = None) -> None:
         """Creates a new snippet in DB."""
@@ -88,6 +88,11 @@ class Snippet(BaseModel):
             updated_at=snippet.updated_at,
             tags={tag.tag.value for tag in snippet.tags},  # Extract the value from TokenDB
             entities={entity.entity.value for entity in snippet.entities},  # Extract the value from TokenDB
+            times={Time(
+                value=time.time.value,
+                literal=time.time.literal,
+                scope=time.time.scope,
+            ) for time in snippet.times},  # Extract the value from TimeDB
             urls={url.url.value for url in snippet.note.urls},  # Extract the value from TokenDB
         )
     
@@ -109,12 +114,13 @@ class Note(BaseModel):
     custom_fields: dict|None = {}
     embedding: Sequence[float]|None = None
     active: bool = True
-    snippets: List<Snippet> = []
+    snippets: List[Snippet] = []
     tags: Set[str] = set()     # own not snippets'
     entities: Set[str] = set() # own not snippets'
     urls: Set[str] = set()
+    times: Set[Time] = set() # own not snippets'
 
-    __token_fields = ["tags", "entities", "entities", "urls"]
+    __token_fields = ["tags", "entities", "times", "urls"]
 
     # --- Token handling ---
 
@@ -135,18 +141,23 @@ class Note(BaseModel):
         return list(entities)
     
     @property
-    def urlsAll(self) -> List[str]:
-        """ Return all URLs from snippets and note """
-        urls = self.urls.copy()
+    def timesAll(self) -> List[Time]:
+        """ Return all times from snippets and note. """
+        times = self.times.copy()
         for snippet in self.snippets:
-            urls.update(snippet.urls)
-        return list(urls)
+            times.update(snippet.times)
+        return list(times)
+    
+    @property
+    def urlsAll(self) -> List[str]:
+        """ Return all urls from snippets and note. Dummy for now. """
+        return self.urls.copy()
 
     def display(self, width: int = 80, footer: bool = True):
         """Displays the note in a formatted way."""
         print("\n"+"=" * width)
-        print(f"{Fore.CYAN}Note title:{Style.RESET_ALL} {self.title}")
-        print(f"{Fore.CYAN}Created at: {self.created_at.isoformat()}{Style.RESET_ALL}")
+        print(fsys("Note title: ")+self.title)
+        print(fsys(f"Created at: {self.created_at.isoformat()}"))
         print("-" * width)
 
         for i,snippet in enumerate(self.snippets):
@@ -154,9 +165,15 @@ class Note(BaseModel):
             
         if footer:
             print("-" * width)
-            print(f"{Fore.CYAN}Entities: {Fore.MAGENTA}{', '.join(['@'+kw for kw in self.entitiesAll])}{Style.RESET_ALL}")
-            print(f"{Fore.CYAN}Tags: {Fore.GREEN}{', '.join(['#'+tag for tag in self.tagsAll])}{Style.RESET_ALL}")
-            print(f"{Fore.CYAN}URLs: {Fore.LIGHTBLACK_EX}{', '.join(self.urlsAll)}{Style.RESET_ALL}")
+            if self.entitiesAll:
+                print(fsys("Entities: ")+', '.join([fentity(kw) for kw in self.entitiesAll]))
+            if self.tagsAll:
+                print(fsys("Tags]: ")+', '.join([ftag(tag) for tag in self.tagsAll]))
+            if self.timesAll:
+                print(fsys("Times: ")+', '.join([f"{time.literal} ({time.scope})" for time in self.timesAll]))
+            if self.urls:
+                print(fsys("URLs: ")+', '.join([f"{Fore.LIGHTBLACK_EX}{url.value}{Style.RESET_ALL}" for url in self.urls]))
+
             print("=" * width + "\n")
 
     @staticmethod
@@ -251,7 +268,7 @@ class Note(BaseModel):
                 break
             if content.startswith("/time"):
                 # --- Add time ---
-                literal = content.split(" ", 1)[1]
+                literal = " ".join(content.split(" ", 1)[1:])
                 self.add_time(literal, db=db)
                 marked_for_reinput = True
                 break
@@ -365,6 +382,11 @@ class Note(BaseModel):
             entities={entity.entity.value for entity in note.entities},
             tags={tag.tag.value for tag in note.tags},
             urls={url.url.value for url in note.urls},
+            times={Time(
+                value=time.time.value,
+                literal=time.time.literal,
+                scope=time.time.scope,
+            ) for time in note.times},
         )
 
     @staticmethod

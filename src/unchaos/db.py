@@ -7,7 +7,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import declarative_base, relationship, sessionmaker, Session
 
-from unchaos.types import QueueStatus
+from unchaos.types import QueueStatus, TimeScope
 from .config import config
 
 # Load database path from config
@@ -187,16 +187,6 @@ class QueueDB(Base):
 
     def __repr__(self):
         return f"<QueueDB(id={self.id}, note_id={self.note_id}, status={self.status})>"
-
-class TimeScope(Enum):
-    SECOND = "SECOND"
-    MINUTE = "MINUTE"
-    HOUR = "HOUR"
-    DAY = "DAY"
-    WEEK = "WEEK"
-    MONTH = "MONTH"
-    YEAR = "YEAR"
-    CENTURY = "CENTURY"
 
 class TimeDB(Base):
     __tablename__ = "times"

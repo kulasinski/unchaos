@@ -1,6 +1,8 @@
 from enum import Enum
-from pydantic import BaseModel
 from typing import List, Literal
+from datetime import datetime
+
+from pydantic import BaseModel
 
 class NoteMetadata(BaseModel):
     tags: List[str] = []
@@ -40,3 +42,28 @@ class QueueTask(str, Enum):
     ASSIGN_METADATA = "ASSIGN_METADATA"
     SUGGEST_NODES = "SUGGEST_NODES"
     EMBED = "EMBED"
+
+class TimeScope(Enum):
+    SECOND = "SECOND"
+    MINUTE = "MINUTE"
+    HOUR = "HOUR"
+    DAY = "DAY"
+    WEEK = "WEEK"
+    MONTH = "MONTH"
+    YEAR = "YEAR"
+    CENTURY = "CENTURY"
+
+class Time(BaseModel):
+    value: datetime
+    literal: str
+    scope: TimeScope | None = None
+
+    def __hash__(self):
+        """Make Time objects hashable."""
+        return hash((self.value, self.literal, self.scope))
+
+    def __eq__(self, other):
+        """Ensure equality checks are consistent with hashing."""
+        if not isinstance(other, Time):
+            return False
+        return (self.value, self.literal, self.scope) == (other.value, other.literal, other.scope)

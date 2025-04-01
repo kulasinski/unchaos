@@ -179,17 +179,32 @@ def list(filters: List[str]):
         click.echo(f"No notes found matching filters: {filters}")
         return
 
-    click.echo("-" * 100)
-    for note in notes:
-        click.echo(f"{Fore.CYAN}ID:{Style.RESET_ALL} [{note.id}] | "\
-                   f"{Fore.CYAN}Title:{Style.RESET_ALL} {note.title} | "\
-                   f"{Fore.CYAN}Snippets:{Style.RESET_ALL} {len(note.snippets)} | "\
-                   f"{Fore.CYAN}Created at:{Style.RESET_ALL} {note.created_at.strftime('%Y-%m-%d %H:%M:%S')} | "
-                   f"{Fore.CYAN}Tags:{Style.RESET_ALL} {Fore.GREEN}{', '.join(['#'+tag for tag in note.tagsAll])}{Style.RESET_ALL} | "\
-                   f"{Fore.CYAN}Entities:{Style.RESET_ALL} {Fore.MAGENTA}{', '.join(['@'+kw for kw in note.entitiesAll])}{Style.RESET_ALL}"
-        )
-        click.echo("-" * 100)
+    # click.echo("-" * 100)
+    # for note in notes:
+    #     click.echo(f"{Fore.CYAN}ID:{Style.RESET_ALL} [{note.id}] | "\
+    #                f"{Fore.CYAN}Title:{Style.RESET_ALL} {note.title} | "\
+    #                f"{Fore.CYAN}Snippets:{Style.RESET_ALL} {len(note.snippets)} | "\
+    #                f"{Fore.CYAN}Created at:{Style.RESET_ALL} {note.created_at.strftime('%Y-%m-%d %H:%M:%S')} | "
+    #                f"{Fore.CYAN}Tags:{Style.RESET_ALL} {Fore.GREEN}{', '.join(['#'+tag for tag in note.tagsAll])}{Style.RESET_ALL} | "\
+    #                f"{Fore.CYAN}Entities:{Style.RESET_ALL} {Fore.MAGENTA}{', '.join(['@'+kw for kw in note.entitiesAll])}{Style.RESET_ALL}"
+    #     )
+    #     click.echo("-" * 100)
 
+    headers = [fsys("ID"), fsys("Title"), fsys("Snippets"), fsys("Created At"), fsys("Tags"), fsys("Entities"), fsys("Times")]
+    table = [
+        [
+            fsys(str(note.id)),
+            note.title,
+            len(note.snippets),
+            note.created_at.strftime('%Y-%m-%d %H:%M:%S'),
+            ", ".join([ftag(tag) for tag in note.tagsAll]),
+            ", ".join([fentity(entity) for entity in note.entitiesAll]),
+            ", ".join([f"{t.literal}" for t in note.timesAll])
+        ]
+        for note in notes
+    ]
+
+    click.echo(tabulate(table, headers=headers, tablefmt="simple_outline"))
 # --- Command to Show Tags, Entities, and Tokens ---
 
 @cli.command(name="tags")
@@ -242,6 +257,23 @@ def show_tokens(order_by: str):
         [fwarn("UNIQUE"), unq_tokens, ""],
         [fwarn("TOTAL"), tot_tokens, ""],
     ]
+    click.echo(tabulate(table, headers=headers, tablefmt="simple_outline"))
+
+@cli.command(name="time")
+def show_times():
+    """Displays all time entries in the database."""
+    from .db import get_session
+    from .db import TimeDB
+
+    db = get_session()
+    times = db.query(TimeDB).all()
+
+    if not times:
+        click.echo("No time entries found.")
+        return
+
+    headers = ["ID", "Value", "Literal", "Scope"]
+    table = [[time.id, time.value, time.literal, time.scope or "-"] for time in times]
     click.echo(tabulate(table, headers=headers, tablefmt="simple_outline"))
 
 # --- Command to List Tasks in the Queue ---
@@ -380,6 +412,7 @@ cli.add_command(show)
 cli.add_command(show_tags)
 cli.add_command(show_entities)
 cli.add_command(show_tokens)
+cli.add_command(show_times)
 cli.add_command(edit)
 cli.add_command(list)
 cli.add_command(graph)

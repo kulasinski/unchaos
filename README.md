@@ -65,7 +65,6 @@ unchaos/
 ## Example usage
 
 # TODO
-* add TIME table with datetime object and scope (SECOND,MINUTE,HOUR,DAY,MONTH,YEAR)
 * supabase storage
 * let AI assign entitiy type
 * handle updated_at

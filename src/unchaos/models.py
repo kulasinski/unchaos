@@ -58,6 +58,11 @@ class Snippet(BaseModel):
             token = get_or_create_token(entity, db=db)
             db.add(SnippetEntityDB(snippet_id=new_snippet.id, token_id=token.id))
 
+        # Insert URLs
+        for url in self.urls:
+            token = get_or_create_url(url, db=db)
+            db.add(NoteURLDB(note_id=note_id, token_id=token.id))
+
         db.commit()
 
     def display(self, ord: int=None):
@@ -67,6 +72,9 @@ class Snippet(BaseModel):
             snippet_content = snippet_content.replace(f"#{tag}", f"{Fore.GREEN}#{tag}{Style.RESET_ALL}")
         for entity in self.entities:
             snippet_content = snippet_content.replace(f"@{entity}", f"{Fore.MAGENTA}@{entity}{Style.RESET_ALL}")
+        # Highlight URLs
+        for url in self.urls:
+            snippet_content = snippet_content.replace(url, f"{Fore.LIGHTBLACK_EX}{url}{Style.RESET_ALL}")
         # Display snippet
         print(f"{Fore.CYAN}[{ord}]{Style.RESET_ALL} {snippet_content}")
 
@@ -85,6 +93,7 @@ class Snippet(BaseModel):
                 literal=time.time.literal,
                 scope=time.time.scope,
             ) for time in snippet.times},  # Extract the value from TimeDB
+            urls={url.url.value for url in snippet.note.urls},  # Extract the value from TokenDB
         )
     
     @staticmethod
@@ -143,7 +152,7 @@ class Note(BaseModel):
     def urlsAll(self) -> List[str]:
         """ Return all urls from snippets and note. Dummy for now. """
         return self.urls.copy()
-    
+
     def display(self, width: int = 80, footer: bool = True):
         """Displays the note in a formatted way."""
         print("\n"+"=" * width)
@@ -157,15 +166,14 @@ class Note(BaseModel):
         if footer:
             print("-" * width)
             if self.entitiesAll:
-                print(fsys("Entities: ")+fentity(', '.join(['@'+kw for kw in self.entitiesAll])))
+                print(fsys("Entities: ")+', '.join([fentity(kw) for kw in self.entitiesAll]))
             if self.tagsAll:
-                print(fsys("Tags]: ")+ftag(', '.join(['#'+tag for tag in self.tagsAll])))
-            # print times
+                print(fsys("Tags]: ")+', '.join([ftag(tag) for tag in self.tagsAll]))
             if self.timesAll:
                 print(fsys("Times: ")+', '.join([f"{time.literal} ({time.scope})" for time in self.timesAll]))
-            # print urls
             if self.urls:
-                print(fsys("URLs: ")+', '.join([f"{url.value}" for url in self.urls]))
+                print(fsys("URLs: ")+', '.join([f"{Fore.LIGHTBLACK_EX}{url.value}{Style.RESET_ALL}" for url in self.urls]))
+
             print("=" * width + "\n")
 
     @staticmethod
@@ -312,7 +320,7 @@ class Note(BaseModel):
             for entity in self.entities
         ]
         note.urls = [
-            NoteURLDB(url=get_or_create_token(url, db=db), note_id=note.id)
+            NoteURLDB(url=get_or_create_url(url, db=db), note_id=note.id)
             for url in self.urls
         ]
 
@@ -368,6 +376,7 @@ class Note(BaseModel):
                     updated_at=snippet.updated_at,
                     tags={tag.tag.value for tag in snippet.tags},
                     entities={entity.entity.value for entity in snippet.entities},
+                    urls={url.url.value for url in snippet.note.urls},
                 ) for snippet in note.snippets
             ],
             entities={entity.entity.value for entity in note.entities},
@@ -400,7 +409,7 @@ class Note(BaseModel):
     def delete(self, confirm: bool = True, db: Session = None) -> None:
         """Permanently deletes a note."""
         db = db or get_session()
-        note = db.query(NoteDB).filter(NoteDB.id == self.id).first()
+        note = db.query(NoteDB).filter_by(id=self.id).first()
         if not note:
             raise ValueError(f"Note with ID={self.id} not found.")
         
@@ -467,8 +476,9 @@ class Note(BaseModel):
         """Adds a snippet to a note and DB and extracts tags/entities."""
         db = db or get_session()
 
-        # Extract tags and entities
+        # Extract tags, entities, and URLs
         tags, entities = extract_tags_and_entities(content)
+        urls = extract_urls(content)
 
         # check if snippet is composed of tags only. If so, do not add a snippet, instead add tags to note
         if containsTagsOnly(content):
@@ -484,6 +494,7 @@ class Note(BaseModel):
             content=content,
             tags=tags,
             entities=entities,
+            urls=urls,
         )
 
         if display:

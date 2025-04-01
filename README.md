@@ -68,7 +68,6 @@ unchaos/
 * supabase storage
 * let AI assign entitiy type
 * handle updated_at
-* tabela do urli i quotesów i pytań (2 ostatnie moze tylko przez tagi?)- regex 
 * chat - oparty na SQL searchu + semantic search
 * smarter search
 * add: unchaos tags/kw to display those in use

@@ -229,6 +229,16 @@ def get_or_create_token(value: str, db: Session = None) -> TokenDB:
         db.commit()  # Commit to ensure the token ID is generated
     return token
 
+def get_or_create_url(value: str, db: Session = None) -> TokenDB:
+    """Retrieves or creates a URL by value."""
+    db = db or get_session()
+    url = db.query(TokenDB).filter_by(value=value).first()
+    if not url:
+        url = TokenDB(value=value)
+        db.add(url)
+        db.commit()  # Commit to ensure the URL ID is generated
+    return url
+
 # --- Session Helper ---
 def get_db():
     """Dependency for getting a session."""

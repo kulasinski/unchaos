@@ -11,7 +11,7 @@ from colorama import Fore, Style, init
 from .config import config
 from .db import NoteURLDB, get_session
 from .types import QueueStatus, Token
-from .utils import clear_terminal, ferror, fsys, ftag, fentity, fwarn, split_location_to_nodes
+from .utils import clear_terminal, ferror, fstatus, fsys, ftag, fentity, fwarn, split_location_to_nodes, format_dt
 from .models import Graph, Note, clear_queue
 
 @click.group()
@@ -300,20 +300,13 @@ def queue_list():
     """Lists tasks in the queue."""
     from .models import list_queue
 
-    def color_status(status: str):
-        if status == QueueStatus.PENDING:
-            return Fore.YELLOW + status + Style.RESET_ALL
-        elif status == QueueStatus.PROCESSING:
-            return Fore.CYAN + status + Style.RESET_ALL
-        elif status == QueueStatus.COMPLETED:
-            return Fore.GREEN + status + Style.RESET_ALL
-        elif status == QueueStatus.FAILED:
-            return Fore.RED + status + Style.RESET_ALL
-
     queue_items = list_queue()
-    click.echo(f"{len(queue_items)} tasks in the queue:")
-    for item in queue_items:
-        click.echo(f"Task ID: {item.id} | Note ID: {item.note_id} | Task {item.task} | Status: {color_status(item.status)} | Created At: {item.created_at}")
+    headers = ["Task ID", "Note ID", "Task", "Status", "Created At"]
+    table = [
+        [fsys(item.id), fsys(item.note_id), item.task, fstatus(item.status), fsys(format_dt(item.created_at))]
+        for item in queue_items
+    ]
+    click.echo(tabulate(table, headers=headers, tablefmt="simple_outline"))
 
 @queue.command(name="clear")
 def queue_clear():

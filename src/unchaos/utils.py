@@ -4,6 +4,8 @@ from typing import List, Tuple
 
 from colorama import Fore, Style
 
+from .types import QueueStatus
+
 # Regex for extracting tags (#tag) and entities (@entity)
 TAG_PATTERN = r"#([\w-]+|\"[^\"]+\")"
 KEYWORD_PATTERN = r"@([\w-]+|\"[^\"]+\")"
@@ -35,8 +37,12 @@ def split_location_to_nodes(location: str, split_char: str = ">") -> List[str]:
 def flatten(lst):
     return [item for sublist in lst for item in sublist]
 
+def format_dt(dt: datetime, fmt: str = "%Y-%m-%d %H:%M:%S") -> str:
+    """Format datetime to string."""
+    return dt.strftime(fmt)
+
 def now_formatted():
-    return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    return format_dt(datetime.now())
 
 def fsys(content: str):
     """ Format string for system output. """
@@ -58,12 +64,22 @@ def ftag(content: str):
     """ Format string for tag output. """
     return f"{Fore.GREEN}#{content}{Style.RESET_ALL}"
 
-def format_urls_gray(text: str) -> str:
+def fstatus(status: str):
+    if status == QueueStatus.PENDING:
+        return Fore.YELLOW + status + Style.RESET_ALL
+    elif status == QueueStatus.PROCESSING:
+        return Fore.CYAN + status + Style.RESET_ALL
+    elif status == QueueStatus.COMPLETED:
+        return Fore.GREEN + status + Style.RESET_ALL
+    elif status == QueueStatus.FAILED:
+        return Fore.RED + status + Style.RESET_ALL
+
+def furl(content: str) -> str:
     """Formats URLs in gray color."""
-    urls = extract_urls(text)
+    urls = extract_urls(content)
     for url in urls:
-        text = text.replace(url, f"{Fore.LIGHTBLACK_EX}{url}{Style.RESET_ALL}")
-    return text
+        content = content.replace(url, f"{Fore.LIGHTBLACK_EX}{url}{Style.RESET_ALL}")
+    return content
 
 def validate_url(url: str) -> bool:
     """Validates a URL."""
